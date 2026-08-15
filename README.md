@@ -114,12 +114,21 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.11+.
 ```bash
 uv sync
 
-# Verify the free data layer. Requires NO credentials of any kind.
+# Compare players for draft prep, in this league's scoring terms.
+# Requires NO credentials of any kind.
+uv run ff compare "Bijan Robinson" "Jahmyr Gibbs"
+uv run ff rules
+
+# Verify the free data layer end to end.
 uv run python scripts/smoke_test.py
 
 uv run pytest
 uv run ruff check .
 ```
+
+`ff compare` scores every player's real box scores under this league's rules
+(full PPR), then sets that against Sleeper ADP and current injury news — so
+production and market price can be read together. It touches no Yahoo endpoint.
 
 For the Yahoo layer (once API access is approved):
 
@@ -141,11 +150,13 @@ permissions. This repository is public and contains no credentials.
 
 ```
 src/ff/
+├── cli.py           `ff compare`, `ff rules`. No credentials needed.
 ├── config.py        Settings from the environment. No secrets in code.
 ├── store.py         SQLite persistence + aggressive response cache.
 ├── yahoo/           OAuth (oob) and a read-only client. The only authed layer.
 ├── sources/         nflverse, Sleeper, RotoWire. No auth, independently testable.
 ├── scoring/         League settings -> scoring function -> scored stat tables.
+├── analysis/        Player comparison for draft prep. Never imports yahoo/.
 └── identity/        Yahoo ID <-> gsis_id crosswalk, with fuzzy-match fallback.
 docs/
 ├── architecture.md  Layering, design rationale, open questions.

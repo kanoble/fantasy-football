@@ -33,10 +33,15 @@ def scoring_expression(rules: ScoringRules) -> pl.Expr:
 
     terms: list[pl.Expr] = []
     for rule in rules.mappable:
-        assert rule.column is not None  # guaranteed by .mappable
+        # Sum the rule's columns first, then apply the multiplier once. This is
+        # what makes "Fumbles Lost" a single -2 rule over three nflverse
+        # columns instead of three rules that each look complete on their own.
+        #
         # Null means "did not record this stat", which is zero points, not an
         # unknown — a WR with no passing_yards scores 0 for passing, not null.
-        terms.append(pl.col(rule.column).cast(pl.Float64).fill_null(0.0) * rule.points_per_unit)
+        parts = [pl.col(c).cast(pl.Float64).fill_null(0.0) for c in rule.columns]
+        combined = parts[0] if len(parts) == 1 else pl.sum_horizontal(parts)
+        terms.append(combined * rule.points_per_unit)
 
     total = terms[0]
     for term in terms[1:]:
@@ -69,9 +74,7 @@ def score_weekly_stats(
         If ``strict`` and a required column is missing, or if ``rules`` has no
         mappable entries.
     """
-    missing = sorted(
-        {r.column for r in rules.mappable if r.column and r.column not in stats.columns}
-    )
+    missing = sorted(c for c in rules.required_columns() if c not in stats.columns)
     if missing:
         if strict:
             raise ValueError(

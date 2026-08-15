@@ -122,7 +122,28 @@ approval in any way.
 
 ---
 
+### 5. Postseason rows must be filtered out. *(found while building)*
+
+`load_player_stats(summary_level="week")` includes **postseason** rows at weeks
+19-22, tagged `season_type = "POST"`. Counting them inflates season totals and
+games played — and it does so worst for the good players you are most likely to
+be comparing, because they are the ones whose teams make the playoffs.
+
+Observed: Puka Nacua's 2025 read as 19 games / 452.6 points including
+postseason, versus **16 games / 375.0** for the regular season alone.
+
+Fantasy leagues score the regular season, so `compare_players` filters to
+`season_type == "REG"` by default (`--season-type` overrides).
+
 ## Open questions specific to scoring
+
+**Resolution plan for A and B (decided 2026-08-15):** answer them empirically
+once the season is live, by scoring a completed week with `LEAGUE_SCORING` and
+diffing against the official Yahoo box score for the same week. A systematic
+per-player offset points at the 2-point-conversion rule; a DST-only offset
+points at Points Allowed. This turns two guesses into a measurable check, and is
+why the engine keeps `unmapped` visible rather than folding unscored categories
+into zero.
 
 **A. What exactly counts as "Points Allowed" for a DST?** Taking the opponent's
 final score from `schedules` is the obvious reading, but leagues differ on

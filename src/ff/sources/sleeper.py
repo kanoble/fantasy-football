@@ -81,15 +81,19 @@ def all_players(timeout: float = 60.0) -> dict[str, dict[str, Any]]:
 def season_projections(
     season: int,
     position: str,
-    order_by: str = "adp_dd_ppr",
+    order_by: str = "adp_ppr",
     season_type: str = "regular",
     timeout: float = DEFAULT_TIMEOUT,
 ) -> list[dict[str, Any]]:
     """Season-long projections plus ADP for one position.
 
-    UNDOCUMENTED endpoint. ``order_by`` is required in practice — omitting it
-    returns placeholder rows. ADP is available in several formats, e.g.
-    ``adp_dd_ppr``, ``adp_dd_half_ppr``, ``adp_dd_std``, ``adp_dd_2qb``.
+    UNDOCUMENTED endpoint. ``order_by`` matters: an *invalid* value is not
+    rejected, it just returns unordered placeholder rows. Verified 2026-08-15 —
+    ``adp_dd_ppr`` (as named in docs/data-sources.md) is **not** a real field
+    and returns junk; the real fields are ``adp_ppr``, ``adp_half_ppr``,
+    ``adp_std``, ``adp_2qb``, ``adp_rookie``, and ``adp_dynasty*``.
+
+    Values of ``999`` mean "no ADP data", not "drafted 999th".
     """
     return _get(
         f"{UNDOCUMENTED_BASE}/projections/nfl/{season}",
