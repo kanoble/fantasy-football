@@ -102,6 +102,72 @@ Design notes for whoever builds it:
 - Comparison output is a table, which means the underlying function should
   return a DataFrame and let the caller format it.
 
+## Target architecture: hosted for the league (decided 2026-08-15)
+
+The app is going from a local CLI to a private web app for the league's members
+(a family league; the kids are members too). Stack: **Python pipeline → Supabase
+Postgres → Next.js on Vercel**, with Supabase Auth gated on a hard-coded email
+allowlist.
+
+```
+Python (scheduled job)                Supabase Postgres          Vercel
+──────────────────────                ─────────────────          ──────
+nflverse parquet ──┐                  scored_weekly_stats        Next.js app
+Sleeper ADP ───────┼─→ score with  →  player_index          →    Supabase Auth
+RotoWire RSS ──────┤   LEAGUE_SCORING adp_projections            (email allowlist)
+Yahoo (read-only) ─┘                  injury_news
+                                      league_* (Yahoo mirrors)
+```
+
+### Why the split is forced, not stylistic
+
+`ff compare` currently downloads nflverse parquet and scores it in Polars per
+invocation. That is fine in a terminal and hostile inside a serverless function:
+cold starts, memory ceilings, and multi-second downloads on every page view.
+
+So ingestion and scoring move to a **scheduled batch job**, and the web app only
+ever reads pre-scored rows out of Postgres. Two consequences worth stating:
+
+- **Adding users adds no Yahoo requests.** The app never calls Yahoo; the job
+  does, on a fixed cadence. This is what makes the audience size irrelevant to
+  Yahoo's load, and it is the strongest thing we can say in the API application.
+- **Page loads become a Postgres query.** ~18.5k player-weeks per regular season
+  means a decade of scored history is under 200k rows — nothing for Postgres,
+  with the right index on `(player_id, season, week)`.
+
+### What survives, what changes
+
+| Layer | Fate |
+|---|---|
+| `scoring/` | **Unchanged.** Pure functions over tables; it does not care whether the output goes to a terminal or Postgres. This is the payoff for keeping it I/O-free. |
+| `sources/` | **Unchanged.** Still the ingestion side, now called from the job. |
+| `analysis/` | **Mostly survives** as the job's scoring step; the presentation half moves to the web app. |
+| `identity/` | **Unchanged**, and more important — the crosswalk gets persisted and reused rather than recomputed. |
+| `yahoo/` | **Unchanged** client; only the caller moves (scheduled job, not CLI). |
+| `store.py` | **Replaced.** SQLite gives way to Supabase. Its caching role largely disappears — Postgres becomes the cache. ~190 lines, no ORM, deliberately thin, so the blast radius is small. |
+| `cli.py` | **Kept** for local development and for running the pipeline by hand. |
+
+### Credential handling changes materially
+
+A refresh token on a laptop and a refresh token on a server are different risks.
+In deployment it lives in server-side environment variables only, is never
+committed, and is never sent to the browser. No Yahoo credential may be reachable
+from client-side code — that is a hard rule, not a preference, because Next.js
+makes it genuinely easy to leak a secret into a client bundle by accident.
+
+### Open questions for the migration
+
+- **Where does the scheduled job run?** Vercel Cron invoking a Python function,
+  a GitHub Action on a schedule, or Supabase's own scheduling. GitHub Actions is
+  the least coupled and easiest to debug; Vercel Cron keeps it in one place.
+- **How much history to materialise?** Scoring all seasons on every run is
+  wasteful — completed seasons never change. Only the current season needs
+  rescoring, and even then mainly after the Thursday stat-correction pass.
+- **Does the web app need the raw stat columns, or only scored output?** Storing
+  all 150 nflverse columns per player-week is possible but probably pointless;
+  storing scored points plus the handful of stats worth displaying is smaller and
+  faster. Decide before designing the schema.
+
 ## Resolved decisions
 
 **Live draft assistant — dropped (2026-08-15).** Open question #1 below asked
