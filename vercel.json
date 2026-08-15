@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/refresh",
+      "schedule": "0 11 * * *"
+    }
+  ],
+  "functions": {
+    "api/cron/refresh.py": {
+      "memory": 1024,
+      "maxDuration": 300
+    }
+  }
+}

@@ -20,6 +20,10 @@ dependencies = [
     "feedparser>=6.0",
     # .env loading for local config
     "python-dotenv>=1.0",
+    # Postgres (Supabase) for the published tables. Direct connection rather
+    # than PostgREST: the refresh COPYs ~174k rows, which would be thousands of
+    # round trips over a REST API.
+    "psycopg[binary]>=3.2",
 ]
 
 [project.scripts]

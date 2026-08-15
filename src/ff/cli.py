@@ -75,6 +75,29 @@ def cmd_compare(args: argparse.Namespace) -> int:
 def cmd_rules(args: argparse.Namespace) -> int:
     print(LEAGUE_SCORING.describe())
     print(f"\n{len(LEAGUE_SCORING.required_columns())} nflverse columns read.")
+    print(f"fingerprint: {LEAGUE_SCORING.fingerprint()}")
+    print("(published data scored under a different fingerprint triggers a full rebuild)")
+    return 0
+
+
+def cmd_refresh(args: argparse.Namespace) -> int:
+    """Run the publish pipeline by hand — same code path Vercel Cron uses."""
+    import os
+
+    dsn = args.dsn or os.environ.get("SUPABASE_DB_URL")
+    if not dsn:
+        print(
+            "error: no database URL. Pass --dsn or set SUPABASE_DB_URL.",
+            file=sys.stderr,
+        )
+        return 2
+
+    from ff.pipeline import run_refresh
+
+    result = run_refresh(dsn, full=args.full)
+    print(f"mode: {result['mode']}" + (f"  ({result['reason']})" if result["reason"] else ""))
+    for table, count in result["rows_written"].items():
+        print(f"  {table:<22} {count:>8,} rows")
     return 0
 
 
@@ -110,6 +133,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     rules = sub.add_parser("rules", help="Show the league scoring rules in use.")
     rules.set_defaults(func=cmd_rules)
+
+    refresh = sub.add_parser("refresh", help="Run the publish pipeline into Postgres.")
+    refresh.add_argument("--dsn", default=None, help="Postgres URL (default: $SUPABASE_DB_URL).")
+    refresh.add_argument(
+        "--full",
+        action="store_true",
+        help="Force a full rebuild. Normally unnecessary — a scoring-rule change "
+        "is detected by fingerprint and rebuilds everything on its own.",
+    )
+    refresh.set_defaults(func=cmd_refresh)
 
     return parser
 

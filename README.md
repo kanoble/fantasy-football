@@ -18,7 +18,7 @@ not redistribute Yahoo data.
 | | |
 |---|---|
 | **Purpose** | Private analytics for one league I am a member of |
-| **Audience** | The members of that same league — my family, **[N]** people. Everyone with access is in the league |
+| **Audience** | The members of that same league — my family, 12 people. Everyone with access is in the league |
 | **Access control** | Hard-coded allowlist of email addresses. No signup, no invite links, no self-service access |
 | **Public access** | **None.** All league data sits behind authentication; unauthenticated visitors see nothing from Yahoo |
 | **Commercial use** | None. No money in the league, no ads, no payments, nothing sold, not a product |

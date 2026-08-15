@@ -166,16 +166,18 @@ def _season_lines(scored: pl.DataFrame, gsis_id: str) -> list[SeasonLine]:
     ]
 
 
-def _adp_lookup(positions: set[str], season: int) -> dict[str, dict[str, float]]:
+def adp_lookup(positions: set[str], season: int) -> dict[str, dict[str, object]]:
     """Fetch Sleeper ADP + projections, keyed by normalised player name.
 
     Uses ``adp_ppr`` because this league is full PPR. Note the research doc's
-    ``adp_dd_ppr`` is not a real field — passing it returns unordered
-    placeholder rows.
+    ``adp_dd_ppr`` is not a real field — passing it is not rejected, it just
+    returns unordered placeholder rows.
+
+    Shared with :mod:`ff.pipeline`, which publishes the same data to Postgres.
     """
     from ff.identity import normalize_name
 
-    out: dict[str, dict[str, float]] = {}
+    out: dict[str, dict[str, object]] = {}
     for position in sorted(positions):
         try:
             rows = sleeper.season_projections(season, position, order_by="adp_ppr")
@@ -189,6 +191,9 @@ def _adp_lookup(positions: set[str], season: int) -> dict[str, dict[str, float]]
             stats = row.get("stats") or {}
             adp = stats.get("adp_ppr")
             out[normalize_name(name)] = {
+                "name": name,
+                "position": meta.get("position") or position,
+                "team": row.get("team") or meta.get("team"),
                 # 999 is Sleeper's "undrafted / no data" placeholder, not an ADP.
                 "adp": adp if adp is not None and adp < 999 else None,
                 "proj": stats.get("pts_ppr"),
@@ -262,7 +267,7 @@ def compare_players(
 
     # Market price and projections.
     positions = {r.ref.position for r in reports if r.ref.position}
-    adp_map = _adp_lookup(positions, adp_season)
+    adp_map = adp_lookup(positions, adp_season)
     for report in reports:
         entry = adp_map.get(normalize_name(report.ref.name))
         if entry:

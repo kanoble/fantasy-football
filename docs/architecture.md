@@ -157,16 +157,49 @@ makes it genuinely easy to leak a secret into a client bundle by accident.
 
 ### Open questions for the migration
 
-- **Where does the scheduled job run?** Vercel Cron invoking a Python function,
-  a GitHub Action on a schedule, or Supabase's own scheduling. GitHub Actions is
-  the least coupled and easiest to debug; Vercel Cron keeps it in one place.
-- **How much history to materialise?** Scoring all seasons on every run is
-  wasteful — completed seasons never change. Only the current season needs
-  rescoring, and even then mainly after the Thursday stat-correction pass.
-- **Does the web app need the raw stat columns, or only scored output?** Storing
-  all 150 nflverse columns per player-week is possible but probably pointless;
-  storing scored points plus the handful of stats worth displaying is smaller and
-  faster. Decide before designing the schema.
+### Where the job runs (decided 2026-08-15)
+
+**Vercel Cron**, invoking `api/cron/refresh.py` on the schedule in `vercel.json`.
+The endpoint verifies `Authorization: Bearer $CRON_SECRET` before doing any work
+and fails closed if the secret is unset — without that check it would be a public
+button for anyone who guessed the URL.
+
+Note Vercel's Hobby plan permits daily cron only; more frequent schedules need
+Pro. Daily at 11:00 UTC sits after nflverse's ~07:00 UTC roster refresh and its
+overnight stats rebuild.
+All three are now decided — see below.
+
+### Refresh strategy (decided 2026-08-15)
+
+**Incremental by default; full rebuild when the scoring rules change.**
+
+A completed season never changes, so the routine run rebuilds only the current
+season. Full rebuilds are not scheduled — they are *triggered*, by the scoring
+rules themselves.
+
+The trap incremental refresh sets is staleness: change a scoring rule, re-score
+only the current season, and history quietly keeps numbers computed under rules
+that no longer exist — two rulesets mixed in one table with nothing to reveal
+it. So `ScoringRules.fingerprint()` hashes the ruleset, the fingerprint is stored
+in `pipeline_meta` beside the published data, and a mismatch forces a full
+rebuild on the next run. Nobody has to remember a flag.
+
+The fingerprint deliberately covers `unmapped` too: promoting a category from
+unmapped to mapped changes scores while the mapped rules alone look unchanged.
+
+`ff refresh --full` forces one anyway. Measured cost of a full rebuild is ~4s and
+311 MB for a decade (174k player-weeks), so forcing one is cheap when warranted —
+the reason to skip it is that the work is pointless, not that it is expensive.
+
+### What gets stored (decided 2026-08-15)
+
+Scored output plus the **22 stat columns the scoring rules actually read** — not
+all 150 nflverse columns. That is enough for the UI to explain *why* a week was
+worth 24.7 points rather than just asserting it, and it keeps the row narrow.
+
+These tables are a **cache, not a system of record**. nflverse parquet and the
+Sleeper API are the sources of truth, both public and permanent, so anything here
+can be rebuilt. That is what makes storing only scored output safe.
 
 ## Resolved decisions
 

@@ -24,6 +24,8 @@ See docs/scoring-rules.md for the full transcription and its verification.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -99,6 +101,26 @@ class ScoringRules:
             for column in rule.columns:
                 seen[column] = None
         return tuple(seen)
+
+    def fingerprint(self) -> str:
+        """A stable hash of this ruleset.
+
+        The refresh pipeline stores this alongside the published data. When it
+        stops matching, every previously-scored row was computed under different
+        rules and is stale — which is what lets an incremental refresh skip
+        completed seasons safely instead of hoping nobody edits the scoring.
+
+        Deliberately covers ``unmapped`` too: moving a category from unmapped to
+        mapped changes scores, even though the mapped rules alone look identical.
+        """
+        payload = json.dumps(
+            {
+                "rules": sorted([r.name, r.points_per_unit, sorted(r.columns)] for r in self.rules),
+                "unmapped": sorted(r.name for r in self.unmapped),
+            },
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
     def describe(self) -> str:
         lines = [f"Scoring rules for {self.league_key or 'unknown league'}:"]
