@@ -149,6 +149,7 @@ src/ff/
 └── identity/        Yahoo ID <-> gsis_id crosswalk, with fuzzy-match fallback.
 docs/
 ├── architecture.md  Layering, design rationale, open questions.
+├── scoring-rules.md The league's scoring settings and how they map to data.
 └── data-sources.md  Verified API research this project is built on.
 scripts/
 └── smoke_test.py    Proves the free data layer works, with no credentials.

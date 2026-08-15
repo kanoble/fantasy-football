@@ -52,6 +52,9 @@ not just the rostered ones, and no additional Yahoo call is needed to do it.
 
 This is the enabling move for everything the project is eventually for:
 
+- **Draft-prep player comparison** *(next feature — see below)* — "would I
+  rather draft A or B" is a question about scored history plus market signal.
+  Both sides need every player scored in league terms, not just rostered ones.
 - **Consistency analysis** — total points hide how they were accumulated. Mean
   and standard deviation over scored weeks separate a steady starter from a
   boom/bust flex. `season_totals()` already emits both.
@@ -62,6 +65,56 @@ This is the enabling move for everything the project is eventually for:
 
 Because it is a pure function over a table, it works identically on one week and
 on twenty seasons.
+
+## Next feature: draft-prep player comparison
+
+**Decided 2026-08-15**, replacing the live draft assistant (see Resolved
+Decisions below).
+
+Take one or more player names and return what's needed to choose between them:
+
+| Signal | Source | Auth needed |
+|---|---|---|
+| Scored past performance (per season, per week) | nflverse weekly stats → `scoring/` | none |
+| Consistency — mean, std dev, floor/ceiling week counts | `season_totals()` | none |
+| Market price — ADP across scoring formats | Sleeper season projections | none |
+| Forward projection | Sleeper projections | none |
+| Injury context | RotoWire RSS | none |
+
+**Nothing in that table requires Yahoo.** This is the key property: the feature
+is usable this season regardless of whether the API application is approved.
+
+The scoring basis is settled too — the league's rules are transcribed in
+[scoring-rules.md](scoring-rules.md) (**full PPR**, 1.0 per reception), so a
+`ScoringRules` can be hand-built today rather than waiting on
+`league/{key}/settings`. Reading the settings endpoint later becomes a
+*validation* step against that document, not a prerequisite.
+
+Design notes for whoever builds it:
+
+- It belongs in a new `analysis/` layer above `scoring/`, importing from
+  `scoring/` and `sources/` but never from `yahoo/`. That keeps the no-auth
+  guarantee structurally enforced rather than merely intended.
+- Resolving a typed player name to a `gsis_id` is the same identity problem as
+  everything else, minus the Yahoo side — so it can use nflverse rosters
+  directly and does not need `IdentityResolver`'s Yahoo path. `normalize_name`
+  is already implemented and tested for this.
+- Comparison output is a table, which means the underlying function should
+  return a DataFrame and let the caller format it.
+
+## Resolved decisions
+
+**Live draft assistant — dropped (2026-08-15).** Open question #1 below asked
+whether `draftresults` populates live mid-draft. Rather than resolve it, the
+feature was cut: it was the only planned capability gated on unverified Yahoo
+behavior, and the evidence pointed the wrong way (Yahoo's live draft runs
+through a separate client, and existing tools scrape the draft-room DOM instead
+of using the API). Draft-prep comparison replaces it and depends on nothing
+unverified.
+
+`draftresults` is still read, but only **post-draft**, for reviewing pick value
+after the fact — a use where latency is irrelevant, so the open question no
+longer blocks anything.
 
 ## Key design decisions
 
@@ -113,11 +166,10 @@ Deliberately stubbed, with interfaces settled:
 Carried forward from [data-sources.md](data-sources.md). These are unverified
 and should be resolved before anything depends on them.
 
-**1. Does `draftresults` populate live during a draft?** *(highest risk)*
-Unknown, and unknown at what latency. Yahoo's live draft runs through a separate
-draft client, and some existing tools scrape the draft-room DOM via a Chrome
-extension instead — which suggests the API may not be usable live. **Prototype
-against a mock draft before committing to any live draft-assistant feature.**
+**1. ~~Does `draftresults` populate live during a draft?~~ CLOSED 2026-08-15** —
+not by answering it, but by cutting the feature that needed it. See Resolved
+Decisions above. `draftresults` is still read post-draft, where latency does not
+matter.
 
 **2. Will Yahoo API access be approved, and how long will it take?** Access is
 approval-gated with human review and no published SLA. This is a lead-time item.
@@ -128,11 +180,31 @@ The architecture's response is that the entire free data layer works without it.
 project could ever become.
 
 **4. Are the Yahoo `stat_id` values in `scoring/rules.py` correct?**
-`YAHOO_STAT_ID_TO_NFLVERSE` uses the widely-circulated NFL stat IDs, but
-data-sources.md did not verify them. Verify against the league's own
-`stat_categories` payload, which returns names alongside IDs. `parse_league_settings`
-is designed to *report* unmapped stat IDs rather than silently score them as
-zero, so the gap is visible rather than quiet.
+*(no longer blocking, as of 2026-08-15)* `YAHOO_STAT_ID_TO_NFLVERSE` uses the
+widely-circulated NFL stat IDs, unverified. But the league's actual scoring
+values are now transcribed in [scoring-rules.md](scoring-rules.md), so a working
+`ScoringRules` can be built by hand with no Yahoo call and no stat-ID guessing.
+The ID map now only matters for *validating* a parsed API payload against that
+document later. `parse_league_settings` still reports unmapped stat IDs rather
+than silently scoring them zero.
+
+**4b. `StatRule.column` cannot express this league.** *(new, blocking)* Three
+rules map to a **sum** of nflverse columns rather than one — Fumbles Lost (3
+columns), 2-Point Conversions (3), Block Kick (3) — and FG 50+ is one league
+bucket spanning two nflverse columns. `column: str | None` must become
+`columns: tuple[str, ...]`. Fix this **before** building on top of the engine: a
+naive one-column mapping undercounts fumbles by ~two thirds and every downstream
+number inherits the error silently. Detail in
+[scoring-rules.md](scoring-rules.md).
+
+**4c. DST scoring needs a second table and a second entry point.** *(new)*
+Offense and kicking come from `load_player_stats`; team defense does not
+(individual `def_sacks` are per-player, the league scores a team unit). DST needs
+`load_team_stats`, and Points Allowed needs deriving from `load_schedules`
+scores. `score_weekly_stats(stats, rules)` structurally cannot cover this.
+Decide between a separate `score_team_defense()` and per-rule source
+declarations before implementing. Also unresolved: Yahoo's exact definition of
+"Points Allowed" (see open question A in scoring-rules.md).
 
 **5. What is the 2026 NFL game key?** 461 = 2025; the 2026 value is unverified.
 Resolve at runtime via `/game/nfl` rather than hardcoding — `YahooClient.game_key`
