@@ -216,6 +216,7 @@ src/ff/
 ├── analysis/        Player comparison for draft prep. Never imports yahoo/.
 └── identity/        Yahoo ID <-> gsis_id crosswalk, with fuzzy-match fallback.
 docs/
+├── handover.md      Current state, what's stubbed, open questions. Start here.
 ├── architecture.md  Layering, design rationale, open questions.
 ├── scoring-rules.md The league's scoring settings and how they map to data.
 └── data-sources.md  Verified API research this project is built on.
