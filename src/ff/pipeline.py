@@ -109,7 +109,20 @@ def build_scored_weekly(
 
     wanted = list(_META_COLUMNS) + [FANTASY_POINTS_COLUMN] + list(rules.required_columns())
     present = [c for c in wanted if c in scored.columns]
-    return scored.select(present)
+    frame = scored.select(present)
+
+    # nflverse emits an all-zero placeholder row per team-week carrying no
+    # player_id and no name: measured 2026-08-15, 70 rows of 70,296 (0.1%)
+    # across 2016-2025, every one scoring exactly 0.0 on every stat. player_id
+    # is part of this table's primary key and NOT NULL, so these can never be
+    # stored — and being all-zero, dropping them loses nothing. Logged, because
+    # a sudden jump in the count would mean upstream changed shape.
+    identified = frame.filter(pl.col("player_id").is_not_null())
+    dropped = frame.height - identified.height
+    if dropped:
+        log.warning("scored_weekly_stats: dropped %d row(s) with no player_id", dropped)
+
+    return identified
 
 
 def build_player_index(seasons: list[int]) -> pl.DataFrame:
@@ -117,7 +130,19 @@ def build_player_index(seasons: list[int]) -> pl.DataFrame:
     from ff.analysis.players import player_index
 
     index = player_index(seasons)
-    return index.select(
+
+    # nflverse rosters carry the occasional entry with no player_name: measured
+    # 2026-08-15, exactly 1 row of 10,147 across 2016-2026 (gsis_id 00-0031605,
+    # a 2016 Viking). This table exists to be searched by name, so a nameless
+    # row is unusable to every caller — and both name columns are NOT NULL in
+    # the schema, so keeping it aborts the whole COPY rather than landing one
+    # bad row. Dropped, but logged: a jump in this count means upstream changed.
+    named = index.filter(pl.col("name").is_not_null() & pl.col("norm_name").is_not_null())
+    dropped = index.height - named.height
+    if dropped:
+        log.warning("player_index: dropped %d row(s) with no player name", dropped)
+
+    return named.select(
         pl.col("gsis_id").alias("player_id"),
         pl.col("name"),
         pl.col("norm_name"),
@@ -150,7 +175,23 @@ def build_adp(season: int, positions: tuple[str, ...] = ADP_POSITIONS) -> pl.Dat
         }
         for norm, entry in lookup.items()
     ]
-    return pl.DataFrame(rows, strict=False)
+    # Declare the schema rather than letting Polars infer it. injury_status is
+    # null for every healthy player, so inference reads Null from the first
+    # infer_schema_length rows and then fails on the first real value
+    # ("Questionable"). That makes the failure depend on how many healthy
+    # players happen to sort first — fine in August, broken in November. These
+    # types mirror the adp_projections table.
+    schema = {
+        "season": pl.Int32,
+        "norm_name": pl.Utf8,
+        "sleeper_name": pl.Utf8,
+        "position": pl.Utf8,
+        "team": pl.Utf8,
+        "adp_ppr": pl.Float64,
+        "projected_points": pl.Float64,
+        "injury_status": pl.Utf8,
+    }
+    return pl.DataFrame(rows, schema=schema, strict=False)
 
 
 def attach_player_ids(adp: pl.DataFrame, index: pl.DataFrame) -> pl.DataFrame:
