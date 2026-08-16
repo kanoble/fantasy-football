@@ -548,15 +548,16 @@ runtime via `/game/nfl` rather than hardcoding.
 
 ## Next steps, in the order I would do them
 
-1. **Sign in.** `npm run dev` (or the preview URL) and click through Google. This
-   is the one unexercised path in the whole system and it gates everything else.
-   If it bounces to a dead localhost address after Google succeeds, the redirect
-   allowlist is the cause — the login page now prints the reason.
-2. **Push, and check production.** The board is committed but **not pushed**, so
-   production is still the pre-UI deployment. `git push` ships it, and
-   `vercel.json` now carries `"framework": "nextjs"`, which production has never
-   built with. Confirm afterwards that `/api/cron/refresh` still answers **401
-   and not a redirect** — that is the regression that matters.
+1. **Merge the PR, then check production.** The board is on a branch, not `main`
+   — see "Why this went through a PR". Merging deploys it. The two things to
+   confirm afterwards, in this order:
+   - `/api/cron/refresh` still answers **401, not a redirect**. This is the
+     regression that matters and the one that hides.
+   - The board loads at https://fantasy-football-red.vercel.app.
+2. **Sign in, if you have not already.** This was the one unexercised path when
+   the session ended. If Google succeeds and then bounces you to a dead address,
+   the Supabase redirect allowlist is the cause and the login page prints the
+   reason. `npm run dev` serves on port 3000.
 3. **Add the other eleven league members** to `league_members` once you have seen
    it work. Each needs pre-creating, because `disable_signup` blocks a first
    OAuth sign-in.
@@ -565,16 +566,33 @@ runtime via `/game/nfl` rather than hardcoding.
 5. **In-season: run the Yahoo score diff** to close Q2 and Q3.
 6. **Then team defense** (Q4), once Q3 is settled.
 
+### Why this went through a PR
+
+The standing rule is still commit-to-`main`, and it has not changed. This change
+took a branch for a specific reason: `main` deploys to production on push, and
+this is the first push that changes **which framework Vercel builds the project
+with**. If the preset is wrong, the failure is not a broken page — it is a failed
+deploy, or a Python cron function that stops being routed. That is worth a
+reviewable diff rather than discovering it from a deploy notification.
+
+Ordinary work after this goes back to `main` directly.
+
 ## State as of the end of the 2026-08-16 UI session
 
-- **Production still runs `3d7a547` — the board is committed but not pushed.**
-  Deliberate, per the "deliberation belongs at push time" rule: pushing changes
-  the framework preset production builds with, and that is worth doing with eyes
-  on it. Local HEAD is `c061c69` plus this handover refresh.
+- **Production still runs `3d7a547`. The board is on a branch with an open PR**,
+  not on `main`. Merging is what ships it.
+- **Sign-in was never confirmed working by the session that built it.** A dev
+  server was handed over for testing and the session ended before any result came
+  back. Treat "does Google sign-in work" as **open**, not as passed. Everything
+  behind the session is verified; the session itself is not.
 - **The board is verified against a preview deployment**, not just locally:
   `fantasy-football-jxxnfli1a-noble21.vercel.app`. The Next app and the Python
   cron function coexist there, which is the architectural bet this session was
   most exposed to.
+- **`/auth/v1/settings` is readable with the anon key**, which the previous
+  handover did not know. It confirms `google: true` and `disable_signup: true`
+  without a dashboard login — worth using before debugging a sign-in. It does
+  **not** expose the redirect allowlist, which remains the unreadable part.
 - **The identity fix is now reflected in the data.** A refresh was run at 15:15
   UTC (the 12:21 cron predated the fix by three hours). Confirmed: Justin
   Jefferson's ADP row carries `00-0036322`, 17 games, 11.9 ppg — which is
@@ -583,7 +601,9 @@ runtime via `/game/nfl` rather than hardcoding.
 - **Migration `0003_board.sql` is applied to the live database.** Applied
   directly, the same way `0001` and `0002` were.
 - 56 Python tests still pass and `ruff` is clean; the UI touched none of it.
-- Nothing is half-finished. The next session starts by signing in.
+- **A `next dev` server may still be running on port 3000** from the handover
+  session. If port 3000 is occupied for no reason, that is why.
+- Nothing is half-finished. The next session starts by merging the PR.
 
 ## Things that will bite you
 
