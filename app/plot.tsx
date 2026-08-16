@@ -58,7 +58,14 @@ export function Plot({
             <span
               key={`${index}-${value}`}
               className={`dot${value >= CEILING ? " hi" : value <= FLOOR ? " lo" : ""}`}
-              style={{ left: `${pct(value)}%` }}
+              style={{
+                left: `${pct(value)}%`,
+                // Staggered by position on the axis, so a season assembles left
+                // to right rather than appearing all at once. The delay is a
+                // fraction of the dot's own x, which costs nothing to compute
+                // and reads as the distribution settling into the track.
+                animationDelay: `${((pct(value) / 100) * 0.28).toFixed(3)}s`,
+              }}
               title={
                 weeks?.[index] != null
                   ? `week ${weeks[index]} · ${value.toFixed(1)}`

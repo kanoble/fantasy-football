@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Nav } from "../nav";
 import { NotOnList } from "../not-on-list";
 import { Picker } from "../picker";
+import { ThemeToggle } from "../theme";
 
 export const metadata: Metadata = { title: "Players" };
 
@@ -38,6 +39,7 @@ export default async function PlayersPage() {
         </div>
         <div className="who-am-i">
           <span>{user?.email}</span>
+          <ThemeToggle />
           <form action="/auth/signout" method="post">
             <button className="linkish" type="submit">
               Sign out

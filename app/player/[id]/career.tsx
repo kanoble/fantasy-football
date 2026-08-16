@@ -26,10 +26,13 @@ export function Career({
   playerId,
   name,
   seasons,
+  tone = "",
 }: {
   playerId: string;
   name: string;
   seasons: SeasonRow[];
+  /** The player's `tm-*` class. One player, one hue, on every season row. */
+  tone?: string;
 }) {
   // The newest season starts open: it is the one a drafter is asking about, and
   // an all-closed table makes the reader click to see anything at all.
@@ -37,7 +40,7 @@ export function Career({
 
   if (seasons.length === 0) {
     return (
-      <div className="career">
+      <div className={`career ${tone}`}>
         <div className="board-head">
           <span className="board-title">Career</span>
         </div>
@@ -50,7 +53,7 @@ export function Career({
   }
 
   return (
-    <div className="career">
+    <div className={`career ${tone}`}>
       <div className="board-head">
         <span className="board-title">
           Career · {seasons.length} season{seasons.length === 1 ? "" : "s"}, every week
@@ -104,7 +107,12 @@ export function Career({
               </button>
 
               {expanded ? (
-                <GameLog playerId={playerId} name={name} season={season.season} />
+                <GameLog
+                  playerId={playerId}
+                  name={name}
+                  season={season.season}
+                  tone={tone}
+                />
               ) : null}
             </div>
           );

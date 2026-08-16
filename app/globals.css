@@ -1,10 +1,26 @@
 /* ---------------------------------------------------------------------------
-   Design tokens and the board.
+   One palette, three theme states, and the board.
 
-   Values are carried over from the published build spec unchanged — the axis
-   scale, the amber, the grid columns and the type sizes were all chosen against
-   live data and are not up for casual revision. See docs/handover.md, "Design
-   decisions, settled".
+   This file used to carry two unrelated colour systems: a page shell keyed on
+   `--accent` (teal) and an instrument keyed on `--c-amber`, with the same ten
+   `--c-*` properties declared separately on `.board`, `.career` and `.picker`.
+   Three copies of one palette is a design system that has not been named, and
+   it made the board theme-deaf — it stayed near-black in light mode, so a
+   light/dark control would have recoloured only the frame around it.
+
+   Everything is now one set of tokens defined once, and every surface reads
+   them. Adding a colour means touching one block, not four.
+
+   THE THREE STATES. A reader has three, not two: an explicit choice stamps
+   `data-theme` on <html>, and the default "system" setting stamps nothing, so
+   only `prefers-color-scheme` separates light from dark. Hence:
+     - bare `:root`                              — the complete light palette
+     - `prefers-color-scheme: dark` + `:not([data-theme="light"])`
+                                                 — dark, unless light was chosen
+     - `:root[data-theme="dark"]`                — dark, chosen explicitly
+   Never style a component inside one of those blocks. A colour whose only
+   definition sits behind `[data-theme]` never applies in the unstamped state,
+   which renders one theme's text on the other theme's ground.
 
    Type: Libre Franklin sets all text; every column of figures is IBM Plex Mono.
    Libre Franklin's digits are proportional and it has no `tnum` feature — a "1"
@@ -13,16 +29,43 @@
 --------------------------------------------------------------------------- */
 
 :root {
-  --bg: #f5f6f6;
-  --surface: #ffffff;
-  --sunk: #eceeee;
-  --ink: #16191b;
-  --ink-soft: #4a5257;
-  --muted: #6e777c;
-  --rule: #dfe3e4;
-  --rule-firm: #c6ccce;
-  --accent: #1f5a52;
-  --accent-ink: #134039;
+  /* grounds and surfaces */
+  --bg: #f7f8f7;
+  --bg-lift: #ffffff;
+  --panel: #ffffff;
+  --panel-hi: #f1f4f3;
+
+  /* ink, in four weights of emphasis */
+  --ink: #12171a;
+  --dim: #4e5559;
+  --muted: #77807f;
+  --faint: #a4acaa;
+
+  /* rules */
+  --rule: #e6e9e8;
+  --firm: #cfd5d3;
+
+  /* the one accent. It marks the median, and nothing else earns it. */
+  --amber: #a06a10;
+  --amber-dim: #d8b881;
+
+  /* the middle-50% band, which is a surface rather than a tint — an accent at
+     14% over a dark ground reads as khaki, which is what it used to do */
+  --band: #edf0ef;
+  --band-edge: #d3dad8;
+
+  /* semantic, and deliberately not the accent */
+  --good: #1c8368;
+  --bad: #a8392c;
+
+  /* depth. A dark inner top edge and a light inner bottom edge is what makes a
+     groove read as cut into the surface rather than drawn on it. */
+  --shadow: rgba(20, 30, 35, 0.16);
+  --groove-top: rgba(20, 30, 35, 0.09);
+  --groove-bot: rgba(255, 255, 255, 0.85);
+
+  /* the neutral a row falls back to when it has no team */
+  --tm-none: #77807f;
 
   --display: var(--font-libre-franklin), "Helvetica Neue", Helvetica, Arial, sans-serif;
   --body: var(--font-libre-franklin), "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -33,36 +76,131 @@
   --step-1: 1.27rem;
   --step-2: 1.6rem;
   --step-3: 2.1rem;
-  --step-4: 3.1rem;
+
+  /* Tells the browser which way to render scrollbars and form controls. Both
+     values here means "follow the OS"; the explicit blocks below narrow it. */
+  color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1213;
-    --surface: #171b1d;
-    --sunk: #101415;
-    --ink: #e5e9ea;
-    --ink-soft: #b3bbbe;
-    --muted: #848e92;
-    --rule: #262c2e;
-    --rule-firm: #394143;
-    --accent: #6fb3a6;
-    --accent-ink: #8fc9bd;
+    --bg: #0b0f11;
+    --bg-lift: #0f1417;
+    --panel: #141b1f;
+    --panel-hi: #192227;
+
+    --ink: #e3e9ea;
+    --dim: #9ba5a9;
+    --muted: #6d777c;
+    --faint: #4b5458;
+
+    --rule: #1a2125;
+    --firm: #293237;
+
+    --amber: #e9ac4d;
+    --amber-dim: #8a6626;
+
+    --band: #1a2429;
+    --band-edge: #2c383e;
+
+    --good: #52c2a4;
+    --bad: #d97b6c;
+
+    --shadow: rgba(0, 0, 0, 0.5);
+    --groove-top: rgba(0, 0, 0, 0.45);
+    --groove-bot: rgba(255, 255, 255, 0.045);
+
+    --tm-none: #6d777c;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f1213;
-  --surface: #171b1d;
-  --sunk: #101415;
-  --ink: #e5e9ea;
-  --ink-soft: #b3bbbe;
-  --muted: #848e92;
-  --rule: #262c2e;
-  --rule-firm: #394143;
-  --accent: #6fb3a6;
-  --accent-ink: #8fc9bd;
+  --bg: #0b0f11;
+  --bg-lift: #0f1417;
+  --panel: #141b1f;
+  --panel-hi: #192227;
+
+  --ink: #e3e9ea;
+  --dim: #9ba5a9;
+  --muted: #6d777c;
+  --faint: #4b5458;
+
+  --rule: #1a2125;
+  --firm: #293237;
+
+  --amber: #e9ac4d;
+  --amber-dim: #8a6626;
+
+  --band: #1a2429;
+  --band-edge: #2c383e;
+
+  --good: #52c2a4;
+  --bad: #d97b6c;
+
+  --shadow: rgba(0, 0, 0, 0.5);
+  --groove-top: rgba(0, 0, 0, 0.45);
+  --groove-bot: rgba(255, 255, 255, 0.045);
+
+  --tm-none: #6d777c;
+
+  color-scheme: dark;
 }
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* ===========================================================================
+   Team hues
+
+   Each team's most identifiable colour, lifted to a common luminance so it
+   survives whichever ground it lands on. Raiders black and Colts navy are
+   invisible at their brand values on a dark board, so the hue is kept and the
+   value is not: a column where a third of the league reads as "off" is a worse
+   answer than one that is approximately right about a shade.
+
+   `light-dark()` picks by the `color-scheme` set above, which follows all three
+   theme states without a third copy of this list. The plain value in front of
+   it is the fallback for a browser that does not support the function — a
+   middle value that is legible, if unexciting, on either ground.
+   =========================================================================== */
+
+.tm-ARI { --tm: #c33356; --tm: light-dark(#a5153c, #dd5c78); }
+.tm-ATL { --tm: #c53550; --tm: light-dark(#a81b32, #e05068); }
+.tm-BAL { --tm: #8362b8; --tm: light-dark(#4b3191, #9d85d4); }
+.tm-BUF { --tm: #3767bd; --tm: light-dark(#14459c, #5089e0); }
+.tm-CAR { --tm: #2494c4; --tm: light-dark(#0378a5, #4fb6e0); }
+.tm-CHI { --tm: #d1662c; --tm: light-dark(#b74a12, #e8894f); }
+.tm-CIN { --tm: #e35a1e; --tm: light-dark(#cf4508, #fb7233); }
+.tm-CLE { --tm: #c07434; --tm: light-dark(#a25a17, #d99653); }
+.tm-DAL { --tm: #7f8891; --tm: light-dark(#5b656e, #a3abb4); }
+.tm-DEN { --tm: #d1691f; --tm: light-dark(#b34f07, #e88c45); }
+.tm-DET { --tm: #2a7fb8; --tm: light-dark(#0f6ba3, #4ea5dd); }
+.tm-GB  { --tm: #4f8f3f; --tm: light-dark(#2f6b20, #74b862); }
+.tm-HOU { --tm: #bf4650; --tm: light-dark(#a12730, #de6b75); }
+.tm-IND { --tm: #3a7cb8; --tm: light-dark(#17548c, #5fa3dd); }
+.tm-JAX { --tm: #21969b; --tm: light-dark(#02767c, #45bcc1); }
+.tm-KC  { --tm: #c73a45; --tm: light-dark(#ad1a26, #e26670); }
+.tm-LA  { --tm: #b08a26; --tm: light-dark(#8a6c0d, #d4a930); }
+.tm-LAC { --tm: #2493cd; --tm: light-dark(#0b73ab, #3cb2e6); }
+.tm-LAR { --tm: #b08a26; --tm: light-dark(#8a6c0d, #d4a930); }
+.tm-LV  { --tm: #8d959b; --tm: light-dark(#545c62, #b9c0c5); }
+.tm-MIA { --tm: #119ba0; --tm: light-dark(#04767c, #1cc0c4); }
+.tm-MIN { --tm: #7a56b5; --tm: light-dark(#5b3496, #9878d4); }
+.tm-NE  { --tm: #4a72a8; --tm: light-dark(#2a4f80, #6f9bd1); }
+.tm-NO  { --tm: #a08a55; --tm: light-dark(#7d6934, #c3ac77); }
+.tm-NYG { --tm: #3b6dbd; --tm: light-dark(#194a9c, #5a92e0); }
+.tm-NYJ { --tm: #2f8f5e; --tm: light-dark(#0f6b3d, #52b483); }
+.tm-OAK { --tm: #8d959b; --tm: light-dark(#545c62, #b9c0c5); }
+.tm-PHI { --tm: #2d8375; --tm: light-dark(#165d52, #43998a); }
+.tm-PIT { --tm: #bfa32c; --tm: light-dark(#977f0d, #e0c452); }
+.tm-SD  { --tm: #2493cd; --tm: light-dark(#0b73ab, #3cb2e6); }
+.tm-SEA { --tm: #5ba327; --tm: light-dark(#467c14, #7ccb3a); }
+.tm-SF  { --tm: #c54540; --tm: light-dark(#a51f19, #e06058); }
+.tm-STL { --tm: #b08a26; --tm: light-dark(#8a6c0d, #d4a930); }
+.tm-TB  { --tm: #c3453a; --tm: light-dark(#a3241a, #de6a5e); }
+.tm-TEN { --tm: #4f8ec4; --tm: light-dark(#28689e, #74b3e0); }
+.tm-WAS { --tm: #b0552e; --tm: light-dark(#8c3714, #d47a52); }
 
 * {
   box-sizing: border-box;
@@ -86,10 +224,10 @@ body {
 code {
   font-family: var(--mono);
   font-size: 0.87em;
-  background: var(--sunk);
+  background: var(--panel-hi);
   padding: 0.1em 0.35em;
   border-radius: 2px;
-  color: var(--ink-soft);
+  color: var(--dim);
 }
 
 .eyebrow {
@@ -120,7 +258,19 @@ code {
   gap: 1.5rem;
   flex-wrap: wrap;
   padding-bottom: 1.1rem;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--firm);
+  position: relative;
+}
+
+/* The masthead's only ornament: a hairline that fades out under the title. */
+.masthead::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  height: 1px;
+  width: 11rem;
+  background: linear-gradient(to right, var(--amber), transparent);
 }
 
 .masthead h1 {
@@ -132,10 +282,20 @@ code {
   font-weight: 800;
 }
 
+.masthead .sub {
+  margin: 0.3rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .masthead .who-am-i {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.9rem;
+  flex-wrap: wrap;
   font-size: var(--step--1);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -156,35 +316,119 @@ code {
   color: var(--ink);
 }
 
-/* ===========================================================================
-   THE BOARD — direction C.
-   Committed to a single dark ground in either theme: it is an instrument face.
+.linkish:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
 
-   The palette is shared with the career table on /player/[id] and the columns
-   on /compare, because those screens reuse the row, plot and panel classes
-   below and every one of them reads these variables. Defining them on .board
-   alone is what would make the same markup render unstyled one route over.
+/* ===========================================================================
+   Theme control
+
+   Three states, not two. "System" is the absence of `data-theme`, so it has to
+   be a real option rather than an initial value the first click destroys.
+   =========================================================================== */
+
+.themer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 1px;
+}
+
+.themer button {
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 1px;
+  padding: 0.12rem 0.45rem;
+  cursor: pointer;
+}
+
+.themer button:hover {
+  color: var(--ink);
+}
+
+.themer button[aria-pressed="true"] {
+  color: var(--amber);
+  border-color: var(--amber-dim);
+  background: var(--panel-hi);
+}
+
+.themer button:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+
+/* ===========================================================================
+   Section nav
+   =========================================================================== */
+
+.nav {
+  display: flex;
+  gap: 0.15rem;
+  align-items: baseline;
+  margin-bottom: 0.55rem;
+}
+
+.nav-link {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.22rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+.nav-link:hover {
+  color: var(--ink);
+}
+
+.nav-link[aria-current="page"] {
+  color: var(--ink);
+  border-color: var(--firm);
+  background: var(--panel);
+}
+
+.nav-link:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* ===========================================================================
+   THE INSTRUMENT — the board, the career table, and the pickers.
+
+   One declaration, three screens. These used to be three copies of the same
+   ten properties, which is why the board and the career table could drift.
    =========================================================================== */
 
 .board,
-.career {
-  --c-bg: #0e1216;
-  --c-panel: #141a20;
-  --c-ink: #dce2e8;
-  --c-dim: #9aa5af;
-  --c-muted: #6e7a85;
-  --c-rule: #212930;
-  --c-rule2: #2c353d;
-  --c-amber: #d6a03c;
-  --c-good: #4e9e86;
-  --c-bad: #c15f52;
-
-  background: var(--c-bg);
-  color: var(--c-ink);
+.career,
+.picker {
+  background: var(--bg);
+  color: var(--ink);
   font-family: var(--body);
-  border: 1px solid #232b32;
+  border: 1px solid var(--firm);
+  border-radius: 3px;
   padding: 1.4rem 1.4rem 1.6rem;
   overflow-x: auto;
+  /* Not a flat slab: the ground lifts very slightly toward the top, which is
+     the difference between a panel and a rectangle.
+
+     It resolves by 8rem, which is just above the sticky header row. That is not
+     an aesthetic choice — `.r-head` is sticky with a flat `--bg`, so any
+     gradient still running behind it would show as a seam sliding under the
+     header on every scroll. */
+  background-image: linear-gradient(to bottom, var(--bg-lift), var(--bg) 8rem);
 }
 
 .board-head {
@@ -193,33 +437,35 @@ code {
   align-items: baseline;
   gap: 1rem;
   padding-bottom: 0.9rem;
-  border-bottom: 1px solid var(--c-rule2);
+  border-bottom: 1px solid var(--firm);
   flex-wrap: wrap;
 }
 
 .board-title {
-  font-size: 0.98rem;
+  font-size: 0.95rem;
   font-weight: 600;
 }
 
 .board-sub {
   font-family: var(--mono);
-  font-size: 0.64rem;
+  font-size: 0.62rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--c-muted);
+  color: var(--muted);
 }
 
 .grid {
-  min-width: 64rem;
+  min-width: 62rem;
 }
 
-/* rank | player | pos | adp | median | iqr | 20+ | plot | chevron */
+/* stripe | rank | player | adp | median | iqr | 20+ | plot | chevron
+   `POS` is gone as a column: it was duplicated in the line under every name,
+   which put "RB" directly left of "RB · DET · 17g". */
 .r {
   display: grid;
-  grid-template-columns: 2.75rem 11.5rem 3.25rem 4rem 4.25rem 5.25rem 3.25rem 1fr 1.75rem;
+  grid-template-columns: 3px 2rem 12.5rem 3.4rem 3.9rem 5.4rem 2.5rem 1fr 1.4rem;
   align-items: center;
-  gap: 0.7rem;
+  gap: 0.75rem;
 }
 
 /* season | G | total | median | iqr | 20+ | best | plot | chevron */
@@ -241,20 +487,21 @@ code {
    nothing to click. The player's name links out of the table below instead. */
 .crow {
   padding: 0.55rem 0;
-  border-bottom: 1px solid var(--c-rule);
+  border-bottom: 1px solid var(--rule);
 }
 
 .r-head {
   font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--c-muted);
-  padding: 0.7rem 0 0.45rem;
+  color: var(--faint);
+  padding: 0.8rem 0 0.45rem;
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--c-bg);
+  background: var(--bg);
+  border-bottom: 1px solid var(--firm);
 }
 
 .r-head .num {
@@ -276,16 +523,16 @@ code {
 }
 
 .sortbtn:hover {
-  color: var(--c-dim);
+  color: var(--dim);
 }
 
 .sortbtn:focus-visible {
-  outline: 1px solid var(--c-amber);
+  outline: 1px solid var(--amber);
   outline-offset: 2px;
 }
 
 .sortbtn[aria-sort] {
-  color: var(--c-amber);
+  color: var(--amber);
 }
 
 .sortbtn .car::after {
@@ -304,9 +551,9 @@ code {
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem 1.5rem;
+  gap: 0.5rem 1.4rem;
   align-items: center;
-  padding: 0.85rem 0 0.15rem;
+  padding: 0.8rem 0 0.15rem;
 }
 
 .control-group {
@@ -318,10 +565,10 @@ code {
 
 .control-group .lbl {
   font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--c-muted);
+  color: var(--faint);
   margin-right: 0.2rem;
 }
 
@@ -329,55 +576,57 @@ code {
   font-family: var(--body);
   font-size: 0.72rem;
   font-weight: 500;
-  color: var(--c-dim);
-  background: none;
-  border: 1px solid var(--c-rule2);
-  padding: 0.22rem 0.6rem;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--firm);
+  padding: 0.2rem 0.6rem;
   cursor: pointer;
-  border-radius: 1rem;
+  border-radius: 2px;
   line-height: 1.3;
 }
 
 .chip:hover {
-  border-color: var(--c-muted);
-  color: var(--c-ink);
+  border-color: var(--muted);
+  color: var(--ink);
 }
 
 .chip[aria-pressed="true"] {
-  border-color: var(--c-amber);
-  color: var(--c-amber);
-  background: rgba(214, 160, 60, 0.09);
+  border-color: var(--amber-dim);
+  color: var(--amber);
+  background: var(--panel-hi);
+  box-shadow: inset 0 1px 0 var(--groove-bot);
 }
 
 .chip:focus-visible {
-  outline: 2px solid var(--c-amber);
+  outline: 2px solid var(--amber);
   outline-offset: 2px;
 }
 
 .search {
   font-family: var(--body);
   font-size: 0.75rem;
-  color: var(--c-ink);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--c-rule2);
-  border-radius: 1rem;
-  padding: 0.24rem 0.7rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--firm);
+  border-radius: 2px;
+  padding: 0.22rem 0.65rem;
   width: 12rem;
+  box-shadow: inset 0 1px 2px var(--groove-top);
 }
 
 .search::placeholder {
-  color: var(--c-muted);
+  color: var(--faint);
 }
 
 .search:focus-visible {
-  outline: 2px solid var(--c-amber);
+  outline: 2px solid var(--amber);
   outline-offset: 1px;
 }
 
 /* rows ---------------------------------------------------------------- */
 .row {
-  padding: 0.42rem 0;
-  border-bottom: 1px solid var(--c-rule);
+  padding: 0.32rem 0;
+  border-bottom: 1px solid var(--rule);
   cursor: pointer;
   background: none;
   border-left: 0;
@@ -389,8 +638,15 @@ code {
   font: inherit;
 }
 
+/* Hover lifts rather than tints: a wash that is brighter at the top reads as a
+   raised surface, where a flat fill just reads as "selected". It is drawn from
+   the row's own team hue, so a row lights in its own colour. */
 .row:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.028);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--tm, var(--tm-none)) 12%, transparent),
+    transparent
+  );
 }
 
 .row:disabled {
@@ -400,18 +656,32 @@ code {
 }
 
 .row[aria-expanded="true"] {
-  background: rgba(214, 160, 60, 0.055);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--tm, var(--tm-none)) 17%, transparent),
+    transparent
+  );
+  border-bottom-color: transparent;
 }
 
 .row:focus-visible {
-  outline: 2px solid var(--c-amber);
+  outline: 2px solid var(--amber);
   outline-offset: -2px;
+}
+
+/* The team stripe. Three pixels, full row height, and the only place a hue is
+   allowed to sit at full strength. */
+.stripe {
+  align-self: stretch;
+  background: var(--tm, var(--tm-none));
+  opacity: 0.85;
+  border-radius: 1px;
 }
 
 .rank {
   font-family: var(--mono);
-  font-size: 0.68rem;
-  color: var(--c-muted);
+  font-size: 0.62rem;
+  color: var(--faint);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -420,7 +690,7 @@ code {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.08rem;
+  gap: 0.06rem;
 }
 
 .who .n {
@@ -431,71 +701,88 @@ code {
   text-overflow: ellipsis;
 }
 
+.row:hover:not(:disabled) .who .n {
+  color: var(--tm, var(--ink));
+}
+
 .who .t {
   font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.07em;
-  color: var(--c-muted);
+  font-size: 0.56rem;
+  letter-spacing: 0.08em;
+  color: var(--faint);
 }
 
 .num {
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  color: var(--dim);
 }
 
 .num.dim {
-  color: var(--c-dim);
-  font-size: 0.75rem;
+  color: var(--muted);
+  font-size: 0.7rem;
 }
 
 .num.key {
-  color: var(--c-ink);
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.82rem;
 }
 
 .iqr {
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   text-align: right;
-  color: var(--c-muted);
+  color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 /* the plot ------------------------------------------------------------ */
+
+/* A milled channel the season sits down inside, rather than a track drawn on
+   the surface. One inset shadow, no images — this renders 923 times. */
 .plot {
   position: relative;
-  height: 1.65rem;
+  height: 1.5rem;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--bg) 96%, var(--ink) 4%);
+  box-shadow: inset 0 1px 2px var(--groove-top), inset 0 -1px 0 var(--groove-bot);
 }
 
 .plot .gl {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 2px;
+  bottom: 2px;
   width: 1px;
-  background: var(--c-rule);
+  background: var(--rule);
 }
 
 .plot .gl.th {
-  background: var(--c-rule2);
+  background: var(--firm);
 }
 
 .plot .band {
   position: absolute;
-  top: 0.3rem;
-  bottom: 0.3rem;
-  background: rgba(214, 160, 60, 0.14);
-  border-left: 1px solid rgba(214, 160, 60, 0.35);
-  border-right: 1px solid rgba(214, 160, 60, 0.35);
+  top: 0.28rem;
+  bottom: 0.28rem;
+  background: var(--band);
+  border-left: 1px solid var(--band-edge);
+  border-right: 1px solid var(--band-edge);
+  border-radius: 1px;
+  box-shadow: inset 0 1px 0 var(--groove-bot);
 }
 
 .plot .med {
   position: absolute;
-  top: 0.12rem;
-  bottom: 0.12rem;
+  top: 0.08rem;
+  bottom: 0.08rem;
   width: 2px;
-  background: var(--c-amber);
+  background: var(--amber);
+  border-radius: 1px;
+  box-shadow: 0 0 4px color-mix(in srgb, var(--amber) 55%, transparent);
 }
 
 .plot .dot {
@@ -506,27 +793,53 @@ code {
   margin-top: -2.5px;
   margin-left: -2.5px;
   border-radius: 50%;
-  background: var(--c-ink);
-  opacity: 0.55;
+  background: var(--tm, var(--tm-none));
+  opacity: 0.5;
 }
 
+/* A ceiling week comes to full strength and grows; a floor week is a ring.
+   Colour rewards, shape reports — so nothing has to fire in alarm on a player
+   who merely had an ordinary Sunday. The previous red-and-green fired on all
+   five of the top five, which is a signal that has stopped meaning anything. */
 .plot .dot.hi {
-  background: var(--c-good);
   opacity: 1;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  margin-left: -3.5px;
+  box-shadow: 0 0 5px color-mix(in srgb, var(--tm, var(--good)) 60%, transparent);
 }
 
 .plot .dot.lo {
-  background: var(--c-bad);
-  opacity: 1;
+  background: transparent;
+  border: 1px solid var(--muted);
+  opacity: 0.75;
 }
 
 .plot .none {
   font-family: var(--mono);
-  font-size: 0.66rem;
-  color: var(--c-muted);
+  font-size: 0.62rem;
+  color: var(--faint);
   position: absolute;
-  left: 0.4rem;
-  top: 0.2rem;
+  left: 0.45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+/* The season settles into the channel, left to right, so the first thing the
+   board does is assemble a distribution — which is the only thing it argues.
+   Opacity and transform only, so it stays on the compositor across ~1,700
+   dots; it runs once, and reduced motion removes it entirely. */
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.5);
+  }
+}
+
+.plot .dot {
+  animation: settle 0.42s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
 }
 
 .axis {
@@ -538,14 +851,17 @@ code {
   position: absolute;
   top: 0;
   font-family: var(--mono);
-  font-size: 0.56rem;
-  color: var(--c-muted);
+  font-size: 0.55rem;
+  color: var(--faint);
   transform: translateX(-50%);
   letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
 }
 
+/* 10 and 20 are the floor and ceiling thresholds — the two numbers on the axis
+   that mean something beyond their own value. */
 .axis span.th {
-  color: var(--c-dim);
+  color: var(--dim);
 }
 
 /* End labels sit inside the track rather than half-clipped past its edges. */
@@ -559,49 +875,64 @@ code {
 
 .chev {
   text-align: center;
-  color: var(--c-muted);
+  color: var(--faint);
   font-size: 0.7rem;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
 
 .row[aria-expanded="true"] .chev {
   transform: rotate(90deg);
-  color: var(--c-amber);
+  color: var(--amber);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .chev {
     transition: none;
   }
+
+  .plot .dot {
+    animation: none;
+  }
 }
 
 .flagpill {
   font-family: var(--mono);
-  font-size: 0.55rem;
+  font-size: 0.52rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 0.05rem 0.28rem;
+  padding: 0 0.25rem;
   border: 1px solid currentColor;
+  border-radius: 2px;
   margin-left: 0.35rem;
   vertical-align: 0.08em;
 }
 
 .flagpill.q {
-  color: var(--c-amber);
+  color: var(--amber);
 }
 
 .flagpill.r {
-  color: var(--c-dim);
+  color: var(--faint);
 }
 
 .flagpill.u {
-  color: var(--c-bad);
+  color: var(--bad);
+}
+
+.flagpill.inline {
+  color: var(--amber);
+  margin-left: 0.5rem;
 }
 
 /* expanded panel ------------------------------------------------------ */
+
+/* Genuinely above the row it opened from: inset shadow top and bottom, and a
+   left edge in the player's team colour. */
 .panel {
-  background: var(--c-panel);
-  border-bottom: 1px solid var(--c-rule);
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+  border-left: 3px solid var(--tm, var(--amber));
+  box-shadow: inset 0 6px 12px -8px var(--shadow), inset 0 -3px 8px -6px var(--shadow);
   padding: 1rem 1.1rem 1.15rem;
   display: flex;
   flex-direction: column;
@@ -610,10 +941,18 @@ code {
 
 .panel-title {
   font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.11em;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--c-muted);
+  color: var(--muted);
+}
+
+.panel-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 table.log {
@@ -624,14 +963,14 @@ table.log {
 
 table.log th {
   font-family: var(--mono);
-  font-size: 0.55rem;
+  font-size: 0.54rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--c-muted);
+  color: var(--faint);
   font-weight: 400;
   text-align: right;
   padding: 0 0.5rem 0.35rem;
-  border-bottom: 1px solid var(--c-rule2);
+  border-bottom: 1px solid var(--firm);
 }
 
 table.log th:first-child {
@@ -642,57 +981,118 @@ table.log td {
   font-family: var(--mono);
   font-size: 0.72rem;
   text-align: right;
-  padding: 0.16rem 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
-  color: var(--c-dim);
+  padding: 0.18rem 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--dim);
 }
 
 table.log td:first-child {
   text-align: left;
-  color: var(--c-muted);
+  color: var(--muted);
+}
+
+table.log tbody tr:hover td {
+  background: var(--panel-hi);
+}
+
+/* The week the arithmetic below is explaining. */
+table.log tbody tr.sel td {
+  background: var(--panel-hi);
 }
 
 table.log td.pts {
-  color: var(--c-ink);
+  color: var(--ink);
   font-weight: 600;
 }
 
 table.log td.pts.hi {
-  color: var(--c-good);
+  color: var(--good);
 }
 
 table.log td.pts.lo {
-  color: var(--c-bad);
+  color: var(--muted);
 }
 
 table.log td.z {
-  color: var(--c-muted);
-  opacity: 0.45;
+  color: var(--faint);
+  opacity: 0.5;
 }
 
+/* The arithmetic ------------------------------------------------------
+   This is the app's actual argument — that a score can be shown rather than
+   asserted — so it is the largest thing in the panel instead of a footnote
+   under a table. Each term names the stat it came from. */
+
 .maths {
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  color: var(--c-dim);
-  line-height: 1.9;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.15rem 0.5rem;
-  align-items: baseline;
+  align-items: center;
+  gap: 0.4rem 0.45rem;
+  padding: 0.8rem 0.95rem;
+  border-radius: 3px;
+  background: var(--bg);
+  box-shadow: inset 0 1px 3px var(--groove-top);
 }
 
 .maths .term {
-  border-bottom: 1px dotted var(--c-rule2);
-  padding-bottom: 1px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  color: var(--dim);
+  white-space: nowrap;
+  padding: 0.15rem 0.45rem;
+  border-radius: 2px;
+  background: var(--panel-hi);
+  border: 1px solid var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+
+.maths .term b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.maths .term span {
+  font-size: 0.52rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
 .maths .eq {
-  color: var(--c-muted);
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  color: var(--faint);
 }
 
 .maths .tot {
-  color: var(--c-amber);
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  margin-left: 0.15rem;
+}
+
+/* Quiet confirmation rather than a warning that only appears when things
+   break: the check runs on every panel, so it should say so. */
+.checks {
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--good);
+  white-space: nowrap;
+}
+
+.checks.bad {
+  color: var(--bad);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  white-space: normal;
 }
 
 /* the expanded row's footer ------------------------------------------- */
@@ -705,8 +1105,10 @@ table.log td.z {
 }
 
 .panel-actions {
-  background: var(--c-panel);
-  border-bottom: 1px solid var(--c-rule);
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+  border-left: 3px solid var(--tm, var(--amber));
+  box-shadow: inset 0 -3px 8px -6px var(--shadow);
   padding: 0 1.1rem 0.95rem;
   display: flex;
   gap: 0.5rem;
@@ -715,26 +1117,26 @@ table.log td.z {
 
 .act {
   font-family: var(--body);
-  font-size: 0.72rem;
-  color: var(--c-dim);
-  background: none;
-  border: 1px solid var(--c-rule2);
-  border-radius: 1rem;
-  padding: 0.24rem 0.75rem;
+  font-size: 0.7rem;
+  color: var(--dim);
+  background: var(--panel-hi);
+  border: 1px solid var(--firm);
+  border-radius: 2px;
+  padding: 0.22rem 0.7rem;
   cursor: pointer;
   text-decoration: none;
   line-height: 1.4;
 }
 
 .act:hover:not(:disabled) {
-  border-color: var(--c-amber);
-  color: var(--c-amber);
+  border-color: var(--amber-dim);
+  color: var(--amber);
 }
 
 .act[aria-pressed="true"] {
-  border-color: var(--c-amber);
-  color: var(--c-amber);
-  background: rgba(214, 160, 60, 0.09);
+  border-color: var(--amber-dim);
+  color: var(--amber);
+  background: var(--panel-hi);
 }
 
 .act:disabled {
@@ -743,7 +1145,7 @@ table.log td.z {
 }
 
 .act:focus-visible {
-  outline: 2px solid var(--c-amber);
+  outline: 2px solid var(--amber);
   outline-offset: 2px;
 }
 
@@ -760,54 +1162,55 @@ table.log td.z {
   gap: 0.5rem;
   flex-wrap: wrap;
   max-width: min(52rem, calc(100vw - 2rem));
-  background: var(--c-panel);
-  border: 1px solid var(--c-rule2);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  background: var(--panel);
+  border: 1px solid var(--firm);
+  border-radius: 3px;
+  box-shadow: 0 8px 28px var(--shadow);
   padding: 0.55rem 0.8rem;
 }
 
 .tray-lbl {
   font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--c-muted);
+  color: var(--faint);
 }
 
 .tray-chip {
   font-family: var(--body);
   font-size: 0.74rem;
-  color: var(--c-ink);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--c-rule2);
-  border-radius: 1rem;
-  padding: 0.2rem 0.65rem;
+  color: var(--ink);
+  background: var(--panel-hi);
+  border: 1px solid var(--firm);
+  border-radius: 2px;
+  padding: 0.18rem 0.6rem;
   cursor: pointer;
 }
 
 .tray-chip:hover {
-  border-color: var(--c-bad);
-  color: var(--c-bad);
+  border-color: var(--bad);
+  color: var(--bad);
 }
 
 .tray-chip .x {
-  color: var(--c-muted);
+  color: var(--faint);
   margin-left: 0.15rem;
 }
 
 .tray-chip:hover .x {
-  color: var(--c-bad);
+  color: var(--bad);
 }
 
 .tray-go {
   font-family: var(--body);
   font-size: 0.76rem;
   font-weight: 600;
-  color: #0e1216;
-  background: var(--c-amber);
-  border: 1px solid var(--c-amber);
-  border-radius: 1rem;
-  padding: 0.24rem 0.85rem;
+  color: var(--bg);
+  background: var(--amber);
+  border: 1px solid var(--amber);
+  border-radius: 2px;
+  padding: 0.22rem 0.8rem;
   text-decoration: none;
   margin-left: auto;
 }
@@ -815,25 +1218,26 @@ table.log td.z {
 .tray-hint {
   font-family: var(--mono);
   font-size: 0.6rem;
-  color: var(--c-muted);
+  color: var(--faint);
   margin-left: auto;
 }
 
 .tray-chip:focus-visible,
 .tray-go:focus-visible {
-  outline: 2px solid var(--c-amber);
+  outline: 2px solid var(--amber);
   outline-offset: 2px;
 }
 
 .legend {
   display: flex;
-  gap: 1.4rem;
+  gap: 1.3rem;
   flex-wrap: wrap;
+  align-items: center;
   padding-top: 0.85rem;
   font-family: var(--mono);
-  font-size: 0.6rem;
-  color: var(--c-muted);
-  letter-spacing: 0.05em;
+  font-size: 0.58rem;
+  color: var(--faint);
+  letter-spacing: 0.06em;
 }
 
 .legend span {
@@ -857,83 +1261,46 @@ table.log td.z {
   gap: 1rem;
   flex-wrap: wrap;
   padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+  margin-top: 0.6rem;
 }
 
 .showing {
   font-family: var(--mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
-  color: var(--c-muted);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
 
 .more {
   font-family: var(--body);
-  font-size: 0.75rem;
-  color: var(--c-dim);
-  background: none;
-  border: 1px solid var(--c-rule2);
-  border-radius: 1rem;
-  padding: 0.28rem 0.9rem;
+  font-size: 0.74rem;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--firm);
+  border-radius: 2px;
+  padding: 0.26rem 0.85rem;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .more:hover {
-  border-color: var(--c-amber);
-  color: var(--c-amber);
+  border-color: var(--amber-dim);
+  color: var(--amber);
 }
 
 .more:focus-visible {
-  outline: 2px solid var(--c-amber);
+  outline: 2px solid var(--amber);
   outline-offset: 2px;
 }
 
 .empty {
   font-family: var(--mono);
   font-size: 0.7rem;
-  color: var(--c-muted);
+  color: var(--faint);
   padding: 2.5rem 0;
   text-align: center;
-}
-
-/* ===========================================================================
-   /player/[id] — the header strip above the career table
-   =========================================================================== */
-
-/* ===========================================================================
-   Section nav — the same three links on every screen
-   =========================================================================== */
-
-.nav {
-  display: flex;
-  gap: 1.1rem;
-  align-items: baseline;
-  margin-bottom: 0.15rem;
-}
-
-.nav-link {
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  text-decoration: none;
-  padding-bottom: 0.15rem;
-  border-bottom: 2px solid transparent;
-}
-
-.nav-link:hover {
-  color: var(--ink);
-}
-
-.nav-link[aria-current="page"] {
-  color: var(--ink);
-  border-bottom-color: var(--accent);
-}
-
-.nav-link:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 /* ===========================================================================
@@ -941,21 +1308,7 @@ table.log td.z {
    =========================================================================== */
 
 .picker {
-  background: var(--c-bg, #0e1216);
-  color: var(--c-ink, #dce2e8);
-  border: 1px solid #232b32;
   padding: 1.2rem 1.4rem 1.4rem;
-
-  --c-bg: #0e1216;
-  --c-panel: #141a20;
-  --c-ink: #dce2e8;
-  --c-dim: #9aa5af;
-  --c-muted: #6e7a85;
-  --c-rule: #212930;
-  --c-rule2: #2c353d;
-  --c-amber: #d6a03c;
-  --c-good: #4e9e86;
-  --c-bad: #c15f52;
 }
 
 /* The staged-for-comparison bar. Reuses the tray's chips, in flow rather than
@@ -966,7 +1319,7 @@ table.log td.z {
   gap: 0.45rem;
   flex-wrap: wrap;
   padding-bottom: 0.85rem;
-  border-bottom: 1px solid var(--c-rule2);
+  border-bottom: 1px solid var(--firm);
 }
 
 /* Collapsed, the bar is the whole control — a rule under it would be dividing
@@ -978,10 +1331,10 @@ table.log td.z {
 
 .picked .lbl {
   font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--c-muted);
+  color: var(--faint);
   margin-right: 0.2rem;
 }
 
@@ -989,25 +1342,25 @@ table.log td.z {
   margin-top: 0.9rem;
 }
 
-/* name | pos | adp | median | end marker */
+/* stripe | name | pos | adp | median | end marker */
 .pick {
   display: grid;
-  grid-template-columns: 1fr 3.5rem 4.5rem 7rem 2rem;
+  grid-template-columns: 3px 1fr 3.5rem 4.5rem 7rem 2rem;
   align-items: center;
   gap: 0.7rem;
 }
 
 .pick-head {
   font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--c-muted);
+  color: var(--faint);
   padding: 0.55rem 0 0.4rem;
-  border-bottom: 1px solid var(--c-rule2);
+  border-bottom: 1px solid var(--firm);
 }
 
-.pick-head > div:not(:first-child) {
+.pick-head > div:not(:first-child):not(:nth-child(2)) {
   text-align: right;
 }
 
@@ -1018,18 +1371,26 @@ table.log td.z {
   color: inherit;
   background: none;
   border: 0;
-  border-bottom: 1px solid var(--c-rule);
-  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 0.36rem 0;
   cursor: pointer;
   text-decoration: none;
 }
 
 .prow:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.03);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--tm, var(--tm-none)) 12%, transparent),
+    transparent
+  );
 }
 
 .prow[aria-pressed="true"] {
-  background: rgba(214, 160, 60, 0.07);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--tm, var(--tm-none)) 17%, transparent),
+    transparent
+  );
 }
 
 .prow:disabled {
@@ -1038,7 +1399,7 @@ table.log td.z {
 }
 
 .prow:focus-visible {
-  outline: 2px solid var(--c-amber);
+  outline: 2px solid var(--amber);
   outline-offset: -2px;
 }
 
@@ -1050,34 +1411,23 @@ table.log td.z {
   text-overflow: ellipsis;
 }
 
+.prow:hover:not(:disabled) .pn {
+  color: var(--tm, var(--ink));
+}
+
 .pick-end {
   text-align: center;
-  color: var(--c-muted);
+  color: var(--faint);
   font-size: 0.8rem;
 }
 
 .prow[aria-pressed="true"] .pick-end {
-  color: var(--c-amber);
+  color: var(--amber);
 }
 
-.masthead .sub {
-  margin: 0.3rem 0 0;
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-.flagpill.inline {
-  color: #b07f24;
-  margin-left: 0.5rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .flagpill.inline {
-    color: #d6a03c;
-  }
-}
+/* ===========================================================================
+   /player/[id] — the header strip above the career table
+   =========================================================================== */
 
 /* The eight numbers a drafter actually asks for, on the page rather than one
    click into it. Wraps rather than scrolls: this is the summary, and a summary
@@ -1087,17 +1437,16 @@ table.log td.z {
   flex-wrap: wrap;
   gap: 0 2.5rem;
   margin: 0;
-  padding: 0.25rem 0 0;
+  padding: 0.25rem 0 1.1rem;
   border-bottom: 1px solid var(--rule);
-  padding-bottom: 1.1rem;
 }
 
 .stat dt {
   font-family: var(--mono);
-  font-size: 0.58rem;
-  letter-spacing: 0.1em;
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--faint);
 }
 
 .stat dd {
@@ -1110,20 +1459,14 @@ table.log td.z {
 
 .stat.big dd {
   font-size: 1.6rem;
-  color: var(--accent-ink);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .stat.big dd {
-    color: var(--accent);
-  }
+  color: var(--amber);
 }
 
 .note {
   margin: 0;
   font-size: 0.86rem;
-  color: var(--ink-soft);
-  border-left: 3px solid var(--rule-firm);
+  color: var(--dim);
+  border-left: 3px solid var(--firm);
   padding: 0.15rem 0 0.15rem 0.9rem;
 }
 
@@ -1142,54 +1485,54 @@ table.vs th,
 table.vs td {
   text-align: right;
   padding: 0.32rem 0.75rem;
-  border-bottom: 1px solid var(--c-rule);
+  border-bottom: 1px solid var(--rule);
 }
 
 table.vs thead th {
   font-family: var(--body);
   font-size: 0.82rem;
   font-weight: 600;
-  color: var(--c-ink);
-  border-bottom: 1px solid var(--c-rule2);
+  color: var(--ink);
+  border-bottom: 1px solid var(--firm);
   padding-bottom: 0.5rem;
 }
 
 table.vs tbody th {
   text-align: left;
   font-family: var(--mono);
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   font-weight: 400;
-  color: var(--c-muted);
+  color: var(--faint);
 }
 
 table.vs td {
   font-family: var(--mono);
   font-size: 0.82rem;
-  color: var(--c-dim);
+  color: var(--dim);
 }
 
 /* The winning value, where "winning" is honest — see the Metric type. */
 table.vs td.win {
-  color: var(--c-amber);
+  color: var(--amber);
   font-weight: 600;
 }
 
 .vs-name {
   color: inherit;
   text-decoration: none;
-  border-bottom: 1px solid var(--c-rule2);
+  border-bottom: 1px solid var(--firm);
 }
 
 .vs-name:hover {
-  color: var(--c-amber);
-  border-bottom-color: var(--c-amber);
+  color: var(--amber);
+  border-bottom-color: var(--amber);
 }
 
 .vs-note {
   font-size: 0.75rem;
-  color: var(--c-muted);
+  color: var(--muted);
   margin: 0.9rem 0 0;
   max-width: 44rem;
 }
@@ -1198,10 +1541,6 @@ table.vs td.win {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-}
-
-.drop .more {
-  text-decoration: none;
 }
 
 /* ===========================================================================
@@ -1217,8 +1556,10 @@ table.vs td.win {
 
 .gate-card {
   width: min(26rem, 100%);
-  background: var(--surface);
-  border: 1px solid var(--rule-firm);
+  background: var(--panel);
+  border: 1px solid var(--firm);
+  border-radius: 3px;
+  box-shadow: 0 10px 34px var(--shadow);
   padding: 2.25rem 2rem;
   display: flex;
   flex-direction: column;
@@ -1236,7 +1577,7 @@ table.vs td.win {
 
 .gate-card p {
   margin: 0;
-  color: var(--ink-soft);
+  color: var(--dim);
   font-size: 0.92rem;
 }
 
@@ -1253,11 +1594,13 @@ table.vs td.win {
   background: var(--ink);
   color: var(--bg);
   border: 1px solid var(--ink);
+  border-radius: 2px;
 }
 
 .gbtn:hover:not(:disabled) {
-  background: var(--accent-ink);
-  border-color: var(--accent-ink);
+  background: var(--amber);
+  border-color: var(--amber);
+  color: var(--bg);
 }
 
 .gbtn:disabled {
@@ -1266,16 +1609,16 @@ table.vs td.win {
 }
 
 .gbtn:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--amber);
   outline-offset: 2px;
 }
 
 .gate-error {
-  border-left: 3px solid var(--c-bad, #c15f52);
-  background: var(--sunk);
+  border-left: 3px solid var(--bad);
+  background: var(--panel-hi);
   padding: 0.6rem 0.85rem;
   font-size: 0.84rem;
-  color: var(--ink-soft);
+  color: var(--dim);
 }
 
 .gate-note {

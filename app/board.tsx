@@ -12,6 +12,7 @@ import {
   rowState,
   type BoardRow,
 } from "@/lib/board";
+import { teamClass } from "@/lib/teams";
 import { GameLog } from "./game-log";
 import { Axis, Plot } from "./plot";
 
@@ -135,13 +136,14 @@ export function Board({ rows }: { rows: BoardRow[] }) {
 
   return (
     <div className="board">
+      {/* No title here. The masthead already says "Draft board" six lines up,
+          and saying it twice was the loudest thing on the screen. What is left
+          is the part the masthead does not cover: how to operate this. */}
       <div className="board-head">
-        <span className="board-title">
-          Draft board · every {STAT_SEASON} week scored in league terms
-        </span>
         <span className="board-sub">
-          full PPR · regular season · click a row to open the game log
+          every {STAT_SEASON} week, scored in league terms
         </span>
+        <span className="board-sub">click a row to open the game log</span>
       </div>
 
       <div className="controls">
@@ -210,8 +212,8 @@ export function Board({ rows }: { rows: BoardRow[] }) {
       <div className="grid">
         <div className="r r-head">
           <div />
+          <div />
           <div>Player</div>
-          <div>Pos</div>
           <SortHeader current={sortKey} dir={sortDir} target="adp" onSort={sortBy} />
           <SortHeader current={sortKey} dir={sortDir} target="med" onSort={sortBy} />
           <SortHeader current={sortKey} dir={sortDir} target="iqr" onSort={sortBy} />
@@ -250,28 +252,34 @@ export function Board({ rows }: { rows: BoardRow[] }) {
         ) : null}
       </div>
 
+      {/* Reads the same tokens the plot does, rather than repeating hex values
+          that would then only be right in one theme — which is what the old
+          hard-coded swatches were. */}
       <div className="legend">
         <span>
-          <i style={{ background: "#DCE2E8", opacity: 0.55 }} />
-          one game
+          <i style={{ background: "var(--tm-none)", opacity: 0.5 }} />
+          one game, in team colour
         </span>
         <span>
-          <i style={{ background: "#4E9E86" }} />
+          <i style={{ background: "var(--tm-none)", width: "0.7rem", height: "0.7rem" }} />
           ceiling week ≥ {CEILING}
         </span>
         <span>
-          <i style={{ background: "#C15F52" }} />
+          <i style={{ background: "transparent", border: "1px solid var(--muted)" }} />
           floor week ≤ {FLOOR}
         </span>
         <span>
-          <i style={{ background: "#D6A03C", borderRadius: 0, width: "2px", height: "0.7rem" }} />
+          <i
+            style={{ background: "var(--amber)", borderRadius: 0, width: "2px", height: "0.7rem" }}
+          />
           median
         </span>
         <span>
           <i
             style={{
-              background: "rgba(214,160,60,0.3)",
-              borderRadius: 0,
+              background: "var(--band)",
+              border: "1px solid var(--band-edge)",
+              borderRadius: "1px",
               width: "1.1rem",
               height: "0.55rem",
             }}
@@ -387,24 +395,26 @@ function Row({
   return (
     <>
       <button
-        className="r row"
+        className={`r row ${teamClass(row.team)}`}
         type="button"
         aria-expanded={expanded}
         disabled={!hasSeason}
         onClick={onToggle}
       >
+        <span className="stripe" aria-hidden="true" />
         <span className="rank">{ordinal}</span>
         <span className="who">
           <span className="n">
             {row.name}
             {flag}
           </span>
+          {/* Position lives here and only here. It used to be repeated as a
+              column immediately to the right, so "RB" sat next to "RB · DET". */}
           <span className="t">
             {row.position ?? "—"} · {row.team ?? "—"}
             {hasSeason ? ` · ${row.games}g` : ""}
           </span>
         </span>
-        <span className="num dim">{row.position ?? "—"}</span>
         <span className="num dim">{f1(row.adp)}</span>
         <span className="num key">{hasSeason ? f1(row.median) : "—"}</span>
         <span className="iqr">{hasSeason ? `${f1(row.q1)}–${f1(row.q3)}` : "—"}</span>
@@ -422,11 +432,12 @@ function Row({
 
       {expanded && row.player_id ? (
         <>
-          <GameLog playerId={row.player_id} name={row.name} />
+          <GameLog playerId={row.player_id} name={row.name} tone={teamClass(row.team)} />
           {/* Outside the row button rather than inside it: a link and a toggle
               nested in a button is invalid markup, and the browser's own
-              behaviour for it is not something to design around. */}
-          <div className="panel-actions">
+              behaviour for it is not something to design around. Carries the
+              team class so its left edge matches the panel above it. */}
+          <div className={`panel-actions ${teamClass(row.team)}`}>
             <Link className="act" href={`/player/${row.player_id}`}>
               Full career &amp; every week &rsaquo;
             </Link>

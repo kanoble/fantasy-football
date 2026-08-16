@@ -1,6 +1,7 @@
 import { Board } from "./board";
 import { Nav } from "./nav";
 import { NotOnList } from "./not-on-list";
+import { ThemeToggle } from "./theme";
 import { ADP_SEASON, STAT_SEASON } from "@/lib/board";
 import { fetchBoard } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -31,6 +32,7 @@ export default async function BoardPage() {
         <div className="who-am-i">
           <span>{freshnessLabel(freshness)}</span>
           <span>{user?.email}</span>
+          <ThemeToggle />
           <form action="/auth/signout" method="post">
             <button className="linkish" type="submit">
               Sign out

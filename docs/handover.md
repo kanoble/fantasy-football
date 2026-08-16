@@ -25,8 +25,11 @@ been the one unexercised path for two sessions. The Yahoo integration is still
 stubbed, pending an API access application that has been submitted and is
 awaiting a decision.
 
-**The next thing this needs is a design pass**, not another feature. See "A
-design pass is owed".
+**The design pass is done for the board** and is on a branch with an open PR.
+Three directions were mocked against live data, one was chosen, and the
+consolidation it needed — one palette instead of three copies — is what made a
+working light/dark toggle possible. `/player` and `/compare` inherit the new
+system but have not been redesigned. See "The design pass, as built".
 
 ## Live infrastructure
 
@@ -343,34 +346,75 @@ Found by querying the live tables, not by imagining edge cases.
 3. **Flagged** — `injury_status` is null for everyone healthy and a string
    otherwise. Nacua and McCaffrey both sit in the top five carrying one.
 
-### A design pass is owed
+### The design pass, as built
 
-**Flagged 2026-08-16. This is the next thing the UI needs, ahead of any further
-feature.**
+**Done for the board on 2026-08-16, on branch `board-design`.** Three directions
+were mocked against live `draft_board()` rows and Kevin chose the dense one, then
+asked for colour and depth, which a second pass added.
 
-The board was designed — three directions mocked against live data, one chosen,
-its tokens and axis argued for. Everything built since has been *extended* from
-it rather than designed: the career table, the compare columns, the pickers and
-the section nav all borrow the board's palette, its row grid and its chip
-styles because that was the honest way to keep them consistent while the
-question was still "does this work". It shows in the places where the borrowing
-does not quite fit:
+Published mockups:
 
-- **The palette is defined on `.board` and `.career` and `.picker` separately.**
-  Three selectors carrying the same nine custom properties is a design system
-  that has not been named yet.
-- **The instrument ground was chosen for a dense data table.** A player page is
-  mostly a header and eight numbers, and it inherits the same near-black without
-  anyone having asked whether that page wants it.
-- **Hierarchy across the three screens is inconsistent.** The board leads with a
-  title and the stat strip on `/player` leads with figures; `/compare` leads
-  with a control. None of that was decided, it accumulated.
-- **The mobile view is still nothing.** A 64rem grid does not survive a phone,
-  and this is now three screens that do not, not one.
+- Three directions, light and dark — https://claude.ai/code/artifact/f4bbd144-2265-4724-ab84-5abc19f2f170
+- The chosen direction, second pass — https://claude.ai/code/artifact/4e34177f-33b3-4ece-8302-f9e22581a279
 
-Nothing here is broken and none of it should block using the app for a draft.
-It is worth doing before the other eleven members see it, because the first
-impression is the one design decision that cannot be revised later.
+**One palette, defined once, is the load-bearing change.** The stylesheet
+carried two unrelated colour systems: a page shell keyed on a teal `--accent`
+and an instrument keyed on an amber `--c-amber`, with the same ten `--c-*`
+properties declared separately on `.board`, `.career` and `.picker`. That is why
+the nav underline was teal while everything inside the table was amber, and it
+is why the board was **theme-deaf** — it committed to a near-black ground in
+*both* themes, so a toggle would have recoloured only the frame around a
+permanently black table.
+
+| Decision | Why |
+|---|---|
+| **Colour comes from the team** | Four honest sources existed on a screen this dense — position, team, performance, or nothing. Team is already in every row and is the subject's own vernacular. `lib/teams.ts` maps it to a `tm-*` class; the dots, the row stripe, the hover wash and the expanded panel's left edge all read `--tm`. |
+| **Team hues keep the hue and drop the value** | Raiders black and Colts navy are invisible at their brand values on a dark ground. A column where a third of the league reads as "off" is worse than one approximately right about a shade. |
+| **Ceiling and floor are shape, not a traffic light** | A ceiling week comes to full strength and grows; a floor week is a hollow ring. The old red fired on **all five of the top five**, which is an alarm that has stopped meaning anything. Colour rewards, shape reports. |
+| **The arithmetic leads the expanded row** | `195×0.1 + 1×6 + 5×1.0 + 34×0.1 + 1×6 = 39.9` is the app's whole argument, and it was set smaller than the table above it, under a heading, as a footnote. Each term now names its stat, and the agreement check reads as a quiet confirmation rather than appearing only on failure. |
+| **Depth is machined, not glossy** | The plot is a milled channel — dark inner top edge, light inner bottom edge — so the season sits *inside* the surface. Hover lifts with a gradient in the row's own team hue. All `inset` shadows; nothing that costs anything across 923 rows. |
+| **Desktop only** | Mobile stays its own design. Deliberate, and unchanged from the previous handover. |
+
+Two defects fixed on the way, both of which had been on screen for weeks: the
+masthead and the board each rendered the words "Draft board" 150px apart, and
+`POS` was a column *and* a field in the line under every name, so "RB" sat
+directly left of "RB · DET · 17g".
+
+### The theme toggle, and the trap in it
+
+Three states — Auto / Light / Dark — in the masthead of all three signed-in
+screens. **"Auto" is the absence of `data-theme`**, which is what lets
+`prefers-color-scheme` keep deciding; a control that stamps a value on first
+paint has silently opted everyone out of following their OS.
+
+**`THEME_SCRIPT` lives in `lib/theme.ts`, not in the `"use client"` component,
+and it must stay there.** Every export of a client module becomes a *client
+reference* when a server component imports it, so the first version reached
+`layout.tsx` as an opaque proxy and `dangerouslySetInnerHTML` rendered **nothing
+at all**. The failure is silent and looks fine in the source — the only symptom
+is a white flash on every navigation for anyone in dark mode. It was caught by
+curling the served HTML, which is the only way to see it. Same class of mistake
+as the `server-only` split between `lib/board.ts` and `lib/queries.ts`.
+
+**Lightning CSS compiles `light-dark()` into its own `var()` polyfill and
+discards the plain-colour fallback declared in front of it.** The compiled
+output was checked: it emits correct definitions for all four theme states, so
+the team hues resolve everywhere. But the belt-and-braces pattern of writing a
+literal colour before a `light-dark()` does **not** survive this toolchain — the
+polyfill is what is actually shipping.
+
+### Still owed on design
+
+- **`/player` and `/compare` inherit the new tokens but were not redesigned.**
+  They are consistent and not broken; their hierarchy was never decided. The
+  board leads with a title, the stat strip on `/player` leads with figures, and
+  `/compare` leads with a control. That is the next design decision.
+- **The mobile view is still nothing.** A 62rem grid does not survive a phone,
+  and this is three screens that do not, not one.
+- **Nobody has seen the built result in a browser except Kevin.** The machine
+  that built it has no browser access, so types, the production build, the
+  compiled CSS, the theme states and the served HTML were all verified — and the
+  visual result was not.
 
 ### Still open on the UI
 
@@ -486,9 +530,10 @@ what `npm run dev` needs in the allowlist.
    for the other eleven, and the callback reports it in words.
 
 2. **Nobody but Kevin has used the app.** Deliberate: he does not want the other
-   eleven added until there is something he is ready to share, and the design
-   pass above is the thing standing between here and that. Do not add them
-   without being asked.
+   eleven added until there is something he is ready to share. The board's
+   design pass — which was the thing standing between here and that — is now
+   built and awaiting merge, so this is closer than it was. **Still do not add
+   them without being asked.**
 
 3. **The layout has never been looked at in a browser by the machine that built
    it.** Data, routing, auth, RLS and server-rendered markup are all verified
@@ -608,6 +653,9 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **The read path is SQL functions, not PostgREST table queries** | The plot needs every week's points per player. One `draft_board()` call returns 923 rows with their arrays; the table-query equivalent is an N+1 over players or a 15,000-row download the client then has to group. |
 | **The scoring rules are mirrored in TypeScript** | The board shows a score as arithmetic, and the read path runs no Python. Made safe by checking the reconstruction against the stored value and surfacing disagreement. See "The scoring rules are duplicated in TypeScript". |
 | **Plain CSS, no Tailwind** | The design arrived as a hand-written stylesheet with specific tokens; porting it to utility classes would have been a translation step with nothing gained. |
+| **One palette on `:root`, not per-component** | Three copies of the same ten properties on `.board`, `.career` and `.picker` is what made the board theme-deaf and let the screens drift. See "The design pass, as built". |
+| **Colour on the board encodes the team** | On a screen this dense colour either encodes something or it is a sticker, and team is already in every row. |
+| **`THEME_SCRIPT` is in `lib/theme.ts`, not the client component** | A client module's exports become client references in a server component, and the flash-prevention silently rendered nothing. |
 | **Row expansion fetches on demand** | 923 game logs is a payload almost none of which gets read. |
 | **`player_cards()` starts at `player_index`, not `adp_projections`** | A player page must render for someone with no price. See "Why `0004` exists". |
 | **`/compare` caps at three** | The plots share one axis and a fourth column makes the shapes incomparable, which is the only thing the screen is for. Extra ids in the URL are dropped, not shrunk. |
@@ -684,8 +732,11 @@ runtime via `/game/nfl` rather than hardcoding.
    caller. A browser signed in to Vercel sees the app fine; a `curl` cannot. That
    is Vercel's gate, not the app's, and it means the cron check is a
    post-merge step rather than a pre-merge one.
-2. **Do the design pass.** See "A design pass is owed". This is the thing
-   standing between the app as it is and the app being shown to eleven relatives.
+2. **Merge `board-design`.** The board's design pass, the one palette and the
+   theme toggle. Kevin looked at it locally and approved before it was pushed.
+   It touches no route matcher, so the cron is not at risk this time — but it
+   does replace every token in `globals.css`, so the thing to check after
+   merging is that **production renders in both themes**, not that it builds.
 3. **Then add the other eleven league members** to `league_members`. Each needs
    pre-creating, because `disable_signup` blocks a first OAuth sign-in. **Do not
    do this before Kevin asks** — he has said explicitly he wants something he is
@@ -712,6 +763,22 @@ The standing rule is still commit-to-`main`, and it has not changed. Kevin asked
 for a PR on this one. The previous UI change also took a branch, for a different
 and now-historical reason: it was the first push that changed which framework
 Vercel builds the project with.
+
+## State as of the end of the 2026-08-16 design session
+
+- **The board's design pass is built and on `board-design`, with an open PR.**
+  Everything under "The design pass, as built" is in it.
+- **`tsc`, `next build`, 56 pytest and `ruff` are all clean.**
+- **Verified without a browser, because the machine had none**: the production
+  build, the compiled CSS (all four theme states resolve, including the
+  Lightning CSS polyfill), the inline theme script's presence in the served
+  `<head>`, and the grid column counts against the markup on both screens whose
+  templates changed. Kevin confirmed the visual result locally on
+  `http://localhost:3000`.
+- **`/player` and `/compare` were re-tokenised, not redesigned.** Deliberate —
+  see "Still owed on design".
+- **A `next dev` server may still be running on port 3000.**
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-16 player/compare session
 
@@ -740,6 +807,18 @@ Vercel builds the project with.
 - Nothing is half-finished.
 
 ## Things that will bite you
+
+- **A `"use client"` module's exports are client references, even the strings.**
+  `THEME_SCRIPT` imported into `layout.tsx` from the client component arrived as
+  a proxy, and `dangerouslySetInnerHTML` rendered nothing — no error, no warning,
+  just a white flash on every navigation in dark mode. Constants a server
+  component needs go in a plain module. See "The theme toggle, and the trap in
+  it".
+
+- **Lightning CSS rewrites `light-dark()` and eats the fallback in front of it.**
+  Writing a literal colour before a `light-dark()` for older browsers does not
+  survive the build: only the polyfilled declaration ships. Check the compiled
+  CSS rather than the source when a colour does not appear.
 
 - **`typedRoutes` cannot resolve an array of literal hrefs.** Mapping a nav over
   `[{href: "/"}, {href: "/player"}]` widens to a union that `Link`'s generic

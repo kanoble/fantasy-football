@@ -5,8 +5,10 @@ import { notFound } from "next/navigation";
 import { ADP_SEASON, STAT_SEASON, rowState } from "@/lib/board";
 import { fetchPlayer } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { teamClass } from "@/lib/teams";
 import { Nav } from "../../nav";
 import { NotOnList } from "../../not-on-list";
+import { ThemeToggle } from "../../theme";
 import { Career } from "./career";
 
 const f1 = (value: number | null | undefined) =>
@@ -72,6 +74,7 @@ export default async function PlayerPage({
             Compare
           </Link>
           <span>{user?.email}</span>
+          <ThemeToggle />
         </div>
       </header>
 
@@ -99,7 +102,15 @@ export default async function PlayerPage({
         </p>
       ) : null}
 
-      <Career playerId={card.player_id} name={card.name} seasons={seasons} />
+      {/* The whole page is about one player, so his team colours the career
+          table's plots and its expanded panels — the same hue his row carries
+          on the board. */}
+      <Career
+        playerId={card.player_id}
+        name={card.name}
+        seasons={seasons}
+        tone={teamClass(card.team)}
+      />
     </main>
   );
 }
