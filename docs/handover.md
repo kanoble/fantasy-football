@@ -665,10 +665,25 @@ runtime via `/game/nfl` rather than hardcoding.
 
 ## Next steps, in the order I would do them
 
-1. **Merge the open PR.** `/player`, `/compare` and the section nav are on a
-   branch; merging deploys them. Migration `0004` is *already* applied to the
-   live database, so there is no schema step — it is additive and nothing read
-   it until this code shipped.
+1. **Merge the open PR, then re-check the cron.** `/player`, `/compare` and the
+   section nav are on a branch; merging deploys them. Migration `0004` is
+   *already* applied to the live database, so there is no schema step — it is
+   additive and nothing read it until this code shipped.
+
+   **This PR changes `proxy.ts`**, so `/api/cron/refresh` must be confirmed
+   answering **401, not a redirect**, on production after merging:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+     https://fantasy-football-red.vercel.app/api/cron/refresh
+   ```
+
+   It could not be checked on the branch's preview: **preview deployments sit
+   behind Vercel's deployment protection**, so every path — including the Python
+   function — answers a 302 to `vercel.com/sso-api` for an unauthenticated
+   caller. A browser signed in to Vercel sees the app fine; a `curl` cannot. That
+   is Vercel's gate, not the app's, and it means the cron check is a
+   post-merge step rather than a pre-merge one.
 2. **Do the design pass.** See "A design pass is owed". This is the thing
    standing between the app as it is and the app being shown to eleven relatives.
 3. **Then add the other eleven league members** to `league_members`. Each needs
