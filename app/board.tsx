@@ -7,6 +7,7 @@ import {
   CEILING,
   FLOOR,
   MAX_COMPARE,
+  normaliseName,
   STAT_SEASON,
   rowState,
   type BoardRow,
@@ -65,17 +66,6 @@ const PRESETS: { id: SortKey; label: string }[] = [
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K"];
 
-/** Fold a name to something a hurried search box can match. Strips accents and
- *  punctuation, so "amonra" finds Amon-Ra St. Brown and "jamarr" finds
- *  Ja'Marr Chase — the apostrophes and hyphens nobody types under time
- *  pressure during a draft. */
-const normalise = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9 ]/g, "");
-
 export function Board({ rows }: { rows: BoardRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("adp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(SORTS.adp.dir);
@@ -88,10 +78,10 @@ export function Board({ rows }: { rows: BoardRow[] }) {
   const [compare, setCompare] = useState<string[]>([]);
 
   const filtered = useMemo(() => {
-    const needle = normalise(query.trim());
+    const needle = normaliseName(query.trim());
     return rows.filter((row) => {
       if (position && (row.position ?? "").toUpperCase() !== position) return false;
-      if (needle && !normalise(row.name).includes(needle)) return false;
+      if (needle && !normaliseName(row.name).includes(needle)) return false;
       return true;
     });
   }, [rows, position, query]);

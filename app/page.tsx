@@ -1,4 +1,5 @@
 import { Board } from "./board";
+import { Nav } from "./nav";
 import { NotOnList } from "./not-on-list";
 import { ADP_SEASON, STAT_SEASON } from "@/lib/board";
 import { fetchBoard } from "@/lib/queries";
@@ -21,10 +22,11 @@ export default async function BoardPage() {
     <main className="shell">
       <header className="masthead">
         <div>
-          <p className="eyebrow">
+          <Nav current="board" />
+          <h1>Draft board</h1>
+          <p className="sub">
             {ADP_SEASON} ADP · {STAT_SEASON} regular season
           </p>
-          <h1>Draft board</h1>
         </div>
         <div className="who-am-i">
           <span>{freshnessLabel(freshness)}</span>

@@ -900,6 +900,166 @@ table.log td.z {
    /player/[id] — the header strip above the career table
    =========================================================================== */
 
+/* ===========================================================================
+   Section nav — the same three links on every screen
+   =========================================================================== */
+
+.nav {
+  display: flex;
+  gap: 1.1rem;
+  align-items: baseline;
+  margin-bottom: 0.15rem;
+}
+
+.nav-link {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  padding-bottom: 0.15rem;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-link:hover {
+  color: var(--ink);
+}
+
+.nav-link[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.nav-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ===========================================================================
+   The picker on /player and /compare
+   =========================================================================== */
+
+.picker {
+  background: var(--c-bg, #0e1216);
+  color: var(--c-ink, #dce2e8);
+  border: 1px solid #232b32;
+  padding: 1.2rem 1.4rem 1.4rem;
+
+  --c-bg: #0e1216;
+  --c-panel: #141a20;
+  --c-ink: #dce2e8;
+  --c-dim: #9aa5af;
+  --c-muted: #6e7a85;
+  --c-rule: #212930;
+  --c-rule2: #2c353d;
+  --c-amber: #d6a03c;
+  --c-good: #4e9e86;
+  --c-bad: #c15f52;
+}
+
+/* The staged-for-comparison bar. Reuses the tray's chips, in flow rather than
+   fixed: on /compare it is the control, not a reminder floating over one. */
+.picked {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--c-rule2);
+}
+
+/* Collapsed, the bar is the whole control — a rule under it would be dividing
+   it from nothing. */
+.picker:has(.picked:only-child) .picked {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.picked .lbl {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin-right: 0.2rem;
+}
+
+.pick-list {
+  margin-top: 0.9rem;
+}
+
+/* name | pos | adp | median | end marker */
+.pick {
+  display: grid;
+  grid-template-columns: 1fr 3.5rem 4.5rem 7rem 2rem;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.pick-head {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  padding: 0.55rem 0 0.4rem;
+  border-bottom: 1px solid var(--c-rule2);
+}
+
+.pick-head > div:not(:first-child) {
+  text-align: right;
+}
+
+.prow {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--c-rule);
+  padding: 0.4rem 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.prow:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.prow[aria-pressed="true"] {
+  background: rgba(214, 160, 60, 0.07);
+}
+
+.prow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.prow:focus-visible {
+  outline: 2px solid var(--c-amber);
+  outline-offset: -2px;
+}
+
+.pick .pn {
+  font-size: 0.86rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pick-end {
+  text-align: center;
+  color: var(--c-muted);
+  font-size: 0.8rem;
+}
+
+.prow[aria-pressed="true"] .pick-end {
+  color: var(--c-amber);
+}
+
 .masthead .sub {
   margin: 0.3rem 0 0;
   font-family: var(--mono);

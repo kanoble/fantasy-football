@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { ADP_SEASON, STAT_SEASON, rowState } from "@/lib/board";
 import { fetchPlayer } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { Nav } from "../../nav";
 import { NotOnList } from "../../not-on-list";
 import { Career } from "./career";
 
@@ -56,11 +57,7 @@ export default async function PlayerPage({
     <main className="shell">
       <header className="masthead">
         <div>
-          <p className="eyebrow">
-            <Link className="linkish" href="/">
-              &lsaquo; Draft board
-            </Link>
-          </p>
+          <Nav current="players" />
           <h1>{card.name}</h1>
           <p className="sub">
             {card.position ?? "—"} · {card.team ?? "free agent"} ·{" "}

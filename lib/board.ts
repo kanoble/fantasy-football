@@ -119,6 +119,40 @@ export type WeekRow = {
   pat_made: number | null;
 };
 
+/**
+ * The slim row the pickers on `/player` and `/compare` search over.
+ *
+ * Deliberately without the weeks and points arrays: the board ships those
+ * because it draws them, and a list you are scanning for a name would carry
+ * ~15,000 floats it never renders. Derived from the same `draft_board()` read
+ * rather than a query of its own.
+ */
+export type PlayerOption = {
+  player_id: string;
+  name: string;
+  position: string | null;
+  team: string | null;
+  adp: number;
+  games: number;
+  median: number | null;
+};
+
+/**
+ * Fold a name to something a hurried search box can match. Strips accents and
+ * punctuation, so "amonra" finds Amon-Ra St. Brown and "jamarr" finds Ja'Marr
+ * Chase — the apostrophes and hyphens nobody types under time pressure during
+ * a draft.
+ *
+ * Shared by the board's find box and both pickers. Three copies of this is
+ * three subtly different ideas of what matches.
+ */
+export const normaliseName = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, "");
+
 export type Freshness = {
   last_success: string | null;
   last_full_refresh: string | null;

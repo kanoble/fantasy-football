@@ -10,9 +10,11 @@ import {
   rowState,
   type PlayerCard,
 } from "@/lib/board";
-import { fetchPlayers } from "@/lib/queries";
+import { fetchPlayerOptions, fetchPlayers } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { Nav } from "../nav";
 import { NotOnList } from "../not-on-list";
+import { Picker } from "../picker";
 import { Axis, Plot } from "../plot";
 
 export const metadata: Metadata = { title: "Compare" };
@@ -130,7 +132,10 @@ export default async function ComparePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { cards, seasons, isMember } = await fetchPlayers(wanted);
+  const [{ cards, seasons, isMember }, { options }] = await Promise.all([
+    fetchPlayers(wanted),
+    fetchPlayerOptions(),
+  ]);
 
   if (!isMember) {
     return (
@@ -144,11 +149,7 @@ export default async function ComparePage({
     <main className="shell">
       <header className="masthead">
         <div>
-          <p className="eyebrow">
-            <Link className="linkish" href="/">
-              &lsaquo; Draft board
-            </Link>
-          </p>
+          <Nav current="compare" />
           <h1>Compare</h1>
           <p className="sub">
             {STAT_SEASON} regular season · full PPR · one axis, so the shapes are
@@ -157,18 +158,29 @@ export default async function ComparePage({
         </div>
         <div className="who-am-i">
           <span>{user?.email}</span>
+          <form action="/auth/signout" method="post">
+            <button className="linkish" type="submit">
+              Sign out
+            </button>
+          </form>
         </div>
       </header>
 
-      {cards.length === 0 ? (
-        <p className="note">
-          Nothing to compare yet. Open a player on the{" "}
-          <Link className="linkish" href="/">
-            board
-          </Link>{" "}
-          and add two or three of them.
-        </p>
-      ) : (
+      {/* The picker sits above the result and is seeded with whatever the URL
+          asked for, so changing the comparison is the same act as building one
+          — rather than going back to the board to stage a different set. */}
+      {/* Keyed on the ids so a navigation remounts it. Without that, `initial`
+          is read once at mount and the picker keeps showing the selection from
+          whichever comparison was loaded first. */}
+      <Picker
+        key={wanted.join(",")}
+        options={options}
+        mode="select"
+        initial={cards.map((card) => card.player_id)}
+        startOpen={cards.length === 0}
+      />
+
+      {cards.length === 0 ? null : (
         <>
           {dropped > 0 ? (
             <p className="note">
@@ -277,26 +289,12 @@ export default async function ComparePage({
               width alone rewards being reliably mediocre.
             </p>
 
+            {/* No "drop" links here: removing a player is the picker's job,
+                and two places to do it is two places to keep in step. */}
             <div className="board-foot">
               <span className="showing">
                 {cards.length} of {MAX_COMPARE} columns
               </span>
-              {cards.length > 1 ? (
-                <div className="drop">
-                  {cards.map((card) => (
-                    <Link
-                      key={card.player_id}
-                      className="more"
-                      href={`/compare?ids=${cards
-                        .filter((other) => other.player_id !== card.player_id)
-                        .map((other) => other.player_id)
-                        .join(",")}`}
-                    >
-                      Drop {card.name}
-                    </Link>
-                  ))}
-                </div>
-              ) : null}
             </div>
           </div>
 

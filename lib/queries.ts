@@ -10,6 +10,7 @@ import {
   type BoardRow,
   type Freshness,
   type PlayerCard,
+  type PlayerOption,
   type SeasonRow,
 } from "./board";
 import { createClient } from "./supabase/server";
@@ -59,6 +60,44 @@ export async function fetchBoard(): Promise<BoardData> {
     // worth surfacing as an error.
     freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
     isMember,
+  };
+}
+
+export type OptionsData = {
+  options: PlayerOption[];
+  isMember: boolean;
+};
+
+/**
+ * The searchable list behind both pickers.
+ *
+ * Reuses the board's read rather than adding a query: the same 923 rows, minus
+ * the arrays the pickers do not draw, minus the rows whose ADP name resolved to
+ * nobody — those have no player page to open, so offering them would be
+ * offering a dead end.
+ *
+ * That makes the searchable universe "players with a 2026 price", which is the
+ * draft-prep scope. A veteran with no ADP still has a working /player/[id] URL;
+ * he is just not in this list. Widening it means searching player_index by
+ * name, and `norm_name` is an exact-match index — a substring search over
+ * 10,146 rows needs pg_trgm added first.
+ */
+export async function fetchPlayerOptions(): Promise<OptionsData> {
+  const { rows, isMember } = await fetchBoard();
+
+  return {
+    isMember,
+    options: rows
+      .filter((row): row is BoardRow & { player_id: string } => row.player_id != null)
+      .map((row) => ({
+        player_id: row.player_id,
+        name: row.name,
+        position: row.position,
+        team: row.team,
+        adp: row.adp,
+        games: row.games,
+        median: row.median,
+      })),
   };
 }
 
