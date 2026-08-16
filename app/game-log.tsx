@@ -17,8 +17,19 @@ const unitsFor = (week: WeekRow, rule: StatRule) =>
 /**
  * One player's season, fetched when the row opens rather than shipped with the
  * board: 923 players' game logs would be a payload nobody reads most of.
+ *
+ * `season` defaults to the board's season. The player page passes its own,
+ * because a career is the one place where an older season is worth opening.
  */
-export function GameLog({ playerId, name }: { playerId: string; name: string }) {
+export function GameLog({
+  playerId,
+  name,
+  season = STAT_SEASON,
+}: {
+  playerId: string;
+  name: string;
+  season?: number;
+}) {
   const [weeks, setWeeks] = useState<WeekRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,8 +37,13 @@ export function GameLog({ playerId, name }: { playerId: string; name: string }) 
     let live = true;
     const supabase = createClient();
 
+    // Clear first: without this, switching seasons shows the previous season's
+    // table under the new season's heading until the round trip lands.
+    setWeeks(null);
+    setError(null);
+
     supabase
-      .rpc("player_week_log", { p_player_id: playerId, p_season: STAT_SEASON })
+      .rpc("player_week_log", { p_player_id: playerId, p_season: season })
       .then(({ data, error: rpcError }) => {
         if (!live) return;
         if (rpcError) setError(rpcError.message);
@@ -38,7 +54,7 @@ export function GameLog({ playerId, name }: { playerId: string; name: string }) 
       // The row can be closed before the round trip lands.
       live = false;
     };
-  }, [playerId]);
+  }, [playerId, season]);
 
   if (error) {
     return (
@@ -51,7 +67,7 @@ export function GameLog({ playerId, name }: { playerId: string; name: string }) 
   if (!weeks) {
     return (
       <div className="panel">
-        <div className="panel-title">Loading {STAT_SEASON} game log…</div>
+        <div className="panel-title">Loading {season} game log…</div>
       </div>
     );
   }
@@ -59,7 +75,7 @@ export function GameLog({ playerId, name }: { playerId: string; name: string }) 
   if (weeks.length === 0) {
     return (
       <div className="panel">
-        <div className="panel-title">No {STAT_SEASON} regular-season weeks.</div>
+        <div className="panel-title">No {season} regular-season weeks.</div>
       </div>
     );
   }
@@ -77,7 +93,7 @@ export function GameLog({ playerId, name }: { playerId: string; name: string }) 
   return (
     <div className="panel">
       <div className="panel-title">
-        {STAT_SEASON} game log · {weeks.length} games
+        {season} game log · {weeks.length} games
       </div>
 
       <div style={{ overflowX: "auto" }}>

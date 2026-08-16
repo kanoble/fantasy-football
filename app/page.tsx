@@ -1,4 +1,5 @@
 import { Board } from "./board";
+import { NotOnList } from "./not-on-list";
 import { ADP_SEASON, STAT_SEASON } from "@/lib/board";
 import { fetchBoard } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -36,26 +37,7 @@ export default async function BoardPage() {
         </div>
       </header>
 
-      {isMember ? (
-        <Board rows={rows} />
-      ) : (
-        // RLS hands a non-member zero rows rather than an error, so without
-        // saying this the screen would be an empty board — indistinguishable
-        // from a broken query, and the most miserable kind of thing to debug.
-        <div className="gate-card">
-          <h1>Not on the league list</h1>
-          <p>
-            You are signed in as <code>{user?.email}</code>, but that address is
-            not in <code>league_members</code>, so the database returns nothing
-            for it. Ask Kevin to add it.
-          </p>
-          <form action="/auth/signout" method="post">
-            <button className="linkish" type="submit">
-              Sign out
-            </button>
-          </form>
-        </div>
-      )}
+      {isMember ? <Board rows={rows} /> : <NotOnList email={user?.email} />}
     </main>
   );
 }

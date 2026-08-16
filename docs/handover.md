@@ -308,6 +308,31 @@ routes. What remains:
 - **The mobile view is still a separate design**, not this one reflowed. A 64rem
   grid does not survive a phone.
 
+### Idea: mark players drafted, live, during the draft (logged 2026-08-16)
+
+Kevin's, and not yet scoped. **Toggle a player as drafted so they drop off the
+board**, so it tracks the room without any Yahoo connection. This is the feature
+that turns the board from a prep screen into a draft-day screen, and it needs no
+new data — only a per-player boolean and a filter.
+
+Three things to settle before building it:
+
+- **Where the state lives.** `localStorage` is free, needs no schema and no write
+  policy, and survives a refresh — but it is one browser only. A table is shared,
+  which is the better model because *drafted* is a fact about the room, not an
+  opinion: whoever marks it, everyone should see it. That makes it the **first
+  write path in the app**, so it needs an RLS `INSERT`/`DELETE` policy for
+  allowlisted members where every other policy today is read-only. No conflict
+  with the README's read-only guarantee — that is a promise about *Yahoo*, and
+  this writes only to our own table.
+- **Hide, or grey out.** A live draft is exactly where a mis-tap happens, and a
+  player who vanishes is hard to get back. A `drafted` pill plus a "hide drafted"
+  toggle is recoverable; deletion from the view is not.
+- **Whether it records *who* took them.** Storing the drafting team costs one
+  column and is the difference between "gone" and "gone to the guy picking two
+  after me", but it is also the first thing in the schema that knows the league
+  has teams — see "Scope: draft prep first".
+
 ## Auth and access control
 
 Two independent barriers. Neither depends on the other.

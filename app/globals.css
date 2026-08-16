@@ -159,9 +159,15 @@ code {
 /* ===========================================================================
    THE BOARD — direction C.
    Committed to a single dark ground in either theme: it is an instrument face.
+
+   The palette is shared with the career table on /player/[id] and the columns
+   on /compare, because those screens reuse the row, plot and panel classes
+   below and every one of them reads these variables. Defining them on .board
+   alone is what would make the same markup render unstyled one route over.
    =========================================================================== */
 
-.board {
+.board,
+.career {
   --c-bg: #0e1216;
   --c-panel: #141a20;
   --c-ink: #dce2e8;
@@ -214,6 +220,28 @@ code {
   grid-template-columns: 2.75rem 11.5rem 3.25rem 4rem 4.25rem 5.25rem 3.25rem 1fr 1.75rem;
   align-items: center;
   gap: 0.7rem;
+}
+
+/* season | G | total | median | iqr | 20+ | best | plot | chevron */
+.r-season {
+  grid-template-columns: 5rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+}
+
+/* player | median | iqr | plot */
+.r-compare {
+  grid-template-columns: 14rem 4.5rem 5.5rem 1fr;
+}
+
+.r-season.r-head > div:not(:first-child),
+.r-compare.r-head > div:not(:first-child) {
+  text-align: right;
+}
+
+/* A compare column is a row of figures, not a control: no hover, no cursor,
+   nothing to click. The player's name links out of the table below instead. */
+.crow {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--c-rule);
 }
 
 .r-head {
@@ -667,6 +695,136 @@ table.log td.z {
   font-weight: 600;
 }
 
+/* the expanded row's footer ------------------------------------------- */
+
+/* Sits directly under the game-log panel and reads as part of it, so the
+   panel drops its own bottom rule when one follows. */
+.panel:has(+ .panel-actions) {
+  border-bottom: 0;
+  padding-bottom: 0.4rem;
+}
+
+.panel-actions {
+  background: var(--c-panel);
+  border-bottom: 1px solid var(--c-rule);
+  padding: 0 1.1rem 0.95rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.act {
+  font-family: var(--body);
+  font-size: 0.72rem;
+  color: var(--c-dim);
+  background: none;
+  border: 1px solid var(--c-rule2);
+  border-radius: 1rem;
+  padding: 0.24rem 0.75rem;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.act:hover:not(:disabled) {
+  border-color: var(--c-amber);
+  color: var(--c-amber);
+}
+
+.act[aria-pressed="true"] {
+  border-color: var(--c-amber);
+  color: var(--c-amber);
+  background: rgba(214, 160, 60, 0.09);
+}
+
+.act:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.act:focus-visible {
+  outline: 2px solid var(--c-amber);
+  outline-offset: 2px;
+}
+
+/* the compare tray ----------------------------------------------------- */
+
+.tray {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 1rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  max-width: min(52rem, calc(100vw - 2rem));
+  background: var(--c-panel);
+  border: 1px solid var(--c-rule2);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  padding: 0.55rem 0.8rem;
+}
+
+.tray-lbl {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+}
+
+.tray-chip {
+  font-family: var(--body);
+  font-size: 0.74rem;
+  color: var(--c-ink);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--c-rule2);
+  border-radius: 1rem;
+  padding: 0.2rem 0.65rem;
+  cursor: pointer;
+}
+
+.tray-chip:hover {
+  border-color: var(--c-bad);
+  color: var(--c-bad);
+}
+
+.tray-chip .x {
+  color: var(--c-muted);
+  margin-left: 0.15rem;
+}
+
+.tray-chip:hover .x {
+  color: var(--c-bad);
+}
+
+.tray-go {
+  font-family: var(--body);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #0e1216;
+  background: var(--c-amber);
+  border: 1px solid var(--c-amber);
+  border-radius: 1rem;
+  padding: 0.24rem 0.85rem;
+  text-decoration: none;
+  margin-left: auto;
+}
+
+.tray-hint {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--c-muted);
+  margin-left: auto;
+}
+
+.tray-chip:focus-visible,
+.tray-go:focus-visible {
+  outline: 2px solid var(--c-amber);
+  outline-offset: 2px;
+}
+
 .legend {
   display: flex;
   gap: 1.4rem;
@@ -736,6 +894,154 @@ table.log td.z {
   color: var(--c-muted);
   padding: 2.5rem 0;
   text-align: center;
+}
+
+/* ===========================================================================
+   /player/[id] — the header strip above the career table
+   =========================================================================== */
+
+.masthead .sub {
+  margin: 0.3rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.flagpill.inline {
+  color: #b07f24;
+  margin-left: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .flagpill.inline {
+    color: #d6a03c;
+  }
+}
+
+/* The eight numbers a drafter actually asks for, on the page rather than one
+   click into it. Wraps rather than scrolls: this is the summary, and a summary
+   that needs scrolling has stopped being one. */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2.5rem;
+  margin: 0;
+  padding: 0.25rem 0 0;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 1.1rem;
+}
+
+.stat dt {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat dd {
+  margin: 0.1rem 0 0;
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.stat.big dd {
+  font-size: 1.6rem;
+  color: var(--accent-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .stat.big dd {
+    color: var(--accent);
+  }
+}
+
+.note {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  border-left: 3px solid var(--rule-firm);
+  padding: 0.15rem 0 0.15rem 0.9rem;
+}
+
+/* ===========================================================================
+   /compare — the head-to-head table under the plots
+   =========================================================================== */
+
+table.vs {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+table.vs th,
+table.vs td {
+  text-align: right;
+  padding: 0.32rem 0.75rem;
+  border-bottom: 1px solid var(--c-rule);
+}
+
+table.vs thead th {
+  font-family: var(--body);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--c-ink);
+  border-bottom: 1px solid var(--c-rule2);
+  padding-bottom: 0.5rem;
+}
+
+table.vs tbody th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 400;
+  color: var(--c-muted);
+}
+
+table.vs td {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--c-dim);
+}
+
+/* The winning value, where "winning" is honest — see the Metric type. */
+table.vs td.win {
+  color: var(--c-amber);
+  font-weight: 600;
+}
+
+.vs-name {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--c-rule2);
+}
+
+.vs-name:hover {
+  color: var(--c-amber);
+  border-bottom-color: var(--c-amber);
+}
+
+.vs-note {
+  font-size: 0.75rem;
+  color: var(--c-muted);
+  margin: 0.9rem 0 0;
+  max-width: 44rem;
+}
+
+.drop {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.drop .more {
+  text-decoration: none;
 }
 
 /* ===========================================================================

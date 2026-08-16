@@ -1,0 +1,316 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+
+import {
+  ADP_SEASON,
+  CEILING,
+  FLOOR,
+  MAX_COMPARE,
+  STAT_SEASON,
+  rowState,
+  type PlayerCard,
+} from "@/lib/board";
+import { fetchPlayers } from "@/lib/queries";
+import { createClient } from "@/lib/supabase/server";
+import { NotOnList } from "../not-on-list";
+import { Axis, Plot } from "../plot";
+
+export const metadata: Metadata = { title: "Compare" };
+
+const f1 = (value: number | null | undefined) =>
+  value == null || Number.isNaN(value) ? "—" : value.toFixed(1);
+
+/**
+ * One line of the comparison table.
+ *
+ * `better` is the direction that wins, or null where there is no honest winner.
+ * The spread is the case that matters: a narrow IQR is not better than a wide
+ * one, it is a different asset, and highlighting the narrower one would be the
+ * board's "safest floor" mistake — the sort that ranked Jefferson third for
+ * being consistently mediocre.
+ */
+type Metric = {
+  label: string;
+  get: (card: PlayerCard) => number | null;
+  format: (card: PlayerCard) => string;
+  better: "high" | "low" | null;
+};
+
+const METRICS: Metric[] = [
+  {
+    label: `${ADP_SEASON} ADP`,
+    get: (c) => c.adp,
+    format: (c) => (c.adp == null ? "undrafted" : f1(c.adp)),
+    better: "low",
+  },
+  {
+    label: "Projected points",
+    get: (c) => c.projected_points,
+    format: (c) => f1(c.projected_points),
+    better: "high",
+  },
+  {
+    label: `${STAT_SEASON} games`,
+    get: (c) => (c.games > 0 ? c.games : null),
+    format: (c) => String(c.games),
+    better: "high",
+  },
+  {
+    label: "Median week",
+    get: (c) => c.median,
+    format: (c) => f1(c.median),
+    better: "high",
+  },
+  {
+    label: "Middle 50%",
+    get: () => null,
+    format: (c) =>
+      c.q1 == null || c.q3 == null ? "—" : `${f1(c.q1)}–${f1(c.q3)}`,
+    better: null,
+  },
+  {
+    label: "Floor · 25th pct",
+    get: (c) => c.q1,
+    format: (c) => f1(c.q1),
+    better: "high",
+  },
+  {
+    label: `Weeks ≥ ${CEILING}`,
+    get: (c) => (c.games > 0 ? c.ceiling_weeks : null),
+    format: (c) => (c.games > 0 ? String(c.ceiling_weeks) : "—"),
+    better: "high",
+  },
+  {
+    label: `Weeks ≤ ${FLOOR}`,
+    get: (c) => (c.games > 0 ? c.floor_weeks : null),
+    format: (c) => (c.games > 0 ? String(c.floor_weeks) : "—"),
+    better: "low",
+  },
+  {
+    label: "Best week",
+    get: (c) => c.best,
+    format: (c) => f1(c.best),
+    better: "high",
+  },
+];
+
+/** Indices holding the winning value, or none when it is tied, undecidable, or
+ *  the metric has no direction. A tie highlights nothing rather than
+ *  arbitrarily crowning the first column. */
+function winners(cards: PlayerCard[], metric: Metric): Set<number> {
+  if (metric.better == null || cards.length < 2) return new Set();
+
+  const values = cards.map(metric.get);
+  const present = values.filter((value): value is number => value != null);
+  if (present.length < 2) return new Set();
+
+  const target =
+    metric.better === "high" ? Math.max(...present) : Math.min(...present);
+  const winning = values.flatMap((value, index) => (value === target ? [index] : []));
+
+  return winning.length === cards.length ? new Set() : new Set(winning);
+}
+
+export default async function ComparePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ids?: string }>;
+}) {
+  const { ids } = await searchParams;
+
+  // The URL is hand-editable and arrives from a link, so treat it as input:
+  // split, drop blanks, collapse duplicates, and cap the width the layout can
+  // actually hold. Extra ids are dropped rather than rendered too narrow.
+  const requested = [...new Set((ids ?? "").split(",").map((id) => id.trim()).filter(Boolean))];
+  const dropped = Math.max(0, requested.length - MAX_COMPARE);
+  const wanted = requested.slice(0, MAX_COMPARE);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { cards, seasons, isMember } = await fetchPlayers(wanted);
+
+  if (!isMember) {
+    return (
+      <main className="shell">
+        <NotOnList email={user?.email} />
+      </main>
+    );
+  }
+
+  return (
+    <main className="shell">
+      <header className="masthead">
+        <div>
+          <p className="eyebrow">
+            <Link className="linkish" href="/">
+              &lsaquo; Draft board
+            </Link>
+          </p>
+          <h1>Compare</h1>
+          <p className="sub">
+            {STAT_SEASON} regular season · full PPR · one axis, so the shapes are
+            the comparison
+          </p>
+        </div>
+        <div className="who-am-i">
+          <span>{user?.email}</span>
+        </div>
+      </header>
+
+      {cards.length === 0 ? (
+        <p className="note">
+          Nothing to compare yet. Open a player on the{" "}
+          <Link className="linkish" href="/">
+            board
+          </Link>{" "}
+          and add two or three of them.
+        </p>
+      ) : (
+        <>
+          {dropped > 0 ? (
+            <p className="note">
+              {dropped} more {dropped === 1 ? "id was" : "ids were"} in the link
+              and {dropped === 1 ? "was" : "were"} dropped — {MAX_COMPARE} columns
+              is as many as one shared axis holds legibly.
+            </p>
+          ) : null}
+
+          <div className="board">
+            <div className="board-head">
+              <span className="board-title">
+                Every {STAT_SEASON} week, one row per player
+              </span>
+              <span className="board-sub">
+                amber band is the middle 50% · dot is one game
+              </span>
+            </div>
+
+            <div className="grid">
+              <div className="r r-compare r-head">
+                <div>Player</div>
+                <div>Median</div>
+                <div>IQR</div>
+                <Axis />
+              </div>
+
+              {cards.map((card) => {
+                const state = rowState(card);
+                return (
+                  <div className="r r-compare crow" key={card.player_id}>
+                    <span className="who">
+                      <span className="n">{card.name}</span>
+                      <span className="t">
+                        {card.position ?? "—"} · {card.team ?? "—"} ·{" "}
+                        {card.adp == null ? "no ADP" : `adp ${f1(card.adp)}`}
+                      </span>
+                    </span>
+                    <span className="num key">{f1(card.median)}</span>
+                    <span className="iqr">
+                      {card.q1 == null || card.q3 == null
+                        ? "—"
+                        : `${f1(card.q1)}–${f1(card.q3)}`}
+                    </span>
+                    <Plot
+                      points={card.games > 0 ? card.points : null}
+                      weeks={card.weeks}
+                      median={card.median}
+                      q1={card.q1}
+                      q3={card.q3}
+                      empty={
+                        state === "rookie"
+                          ? "no NFL games played"
+                          : `no ${STAT_SEASON} games`
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            <table className="vs">
+              <thead>
+                <tr>
+                  <th scope="col">&nbsp;</th>
+                  {cards.map((card) => (
+                    <th key={card.player_id} scope="col">
+                      <Link className="vs-name" href={`/player/${card.player_id}`}>
+                        {card.name}
+                      </Link>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {METRICS.map((metric) => {
+                  const best = winners(cards, metric);
+                  return (
+                    <tr key={metric.label}>
+                      <th scope="row">{metric.label}</th>
+                      {cards.map((card, index) => (
+                        <td
+                          key={card.player_id}
+                          className={best.has(index) ? "win" : undefined}
+                        >
+                          {metric.format(card)}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+                <tr>
+                  <th scope="row">Seasons played</th>
+                  {cards.map((card) => (
+                    <td key={card.player_id}>
+                      {seasons.filter((season) => season.player_id === card.player_id).length}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+
+            <p className="vs-note">
+              The middle 50% has no winner on purpose. A narrow spread is not a
+              better asset than a wide one — it is a different one, and ranking on
+              width alone rewards being reliably mediocre.
+            </p>
+
+            <div className="board-foot">
+              <span className="showing">
+                {cards.length} of {MAX_COMPARE} columns
+              </span>
+              {cards.length > 1 ? (
+                <div className="drop">
+                  {cards.map((card) => (
+                    <Link
+                      key={card.player_id}
+                      className="more"
+                      href={`/compare?ids=${cards
+                        .filter((other) => other.player_id !== card.player_id)
+                        .map((other) => other.player_id)
+                        .join(",")}`}
+                    >
+                      Drop {card.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {cards.length === 1 ? (
+            <p className="note">
+              One player is a profile, not a comparison. Add another from the{" "}
+              <Link className="linkish" href="/">
+                board
+              </Link>
+              .
+            </p>
+          ) : null}
+        </>
+      )}
+    </main>
+  );
+}
