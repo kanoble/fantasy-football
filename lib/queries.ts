@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import {
   ADP_SEASON,
   CEILING,
@@ -7,6 +9,9 @@ import {
   STAT_SEASON,
   type BoardRow,
   type Freshness,
+  type PlayerCard,
+  type PlayerOption,
+  type SeasonRow,
 } from "./board";
 import { createClient } from "./supabase/server";
 
@@ -57,3 +62,107 @@ export async function fetchBoard(): Promise<BoardData> {
     isMember,
   };
 }
+
+export type OptionsData = {
+  options: PlayerOption[];
+  isMember: boolean;
+};
+
+/**
+ * The searchable list behind both pickers.
+ *
+ * Reuses the board's read rather than adding a query: the same 923 rows, minus
+ * the arrays the pickers do not draw, minus the rows whose ADP name resolved to
+ * nobody — those have no player page to open, so offering them would be
+ * offering a dead end.
+ *
+ * That makes the searchable universe "players with a 2026 price", which is the
+ * draft-prep scope. A veteran with no ADP still has a working /player/[id] URL;
+ * he is just not in this list. Widening it means searching player_index by
+ * name, and `norm_name` is an exact-match index — a substring search over
+ * 10,146 rows needs pg_trgm added first.
+ */
+export async function fetchPlayerOptions(): Promise<OptionsData> {
+  const { rows, isMember } = await fetchBoard();
+
+  return {
+    isMember,
+    options: rows
+      .filter((row): row is BoardRow & { player_id: string } => row.player_id != null)
+      .map((row) => ({
+        player_id: row.player_id,
+        name: row.name,
+        position: row.position,
+        team: row.team,
+        adp: row.adp,
+        games: row.games,
+        median: row.median,
+      })),
+  };
+}
+
+export type PlayerData = {
+  /** In the order the ids were asked for, and only for ids that resolved. */
+  cards: PlayerCard[];
+  /** Every season of every requested player, newest first. */
+  seasons: SeasonRow[];
+  isMember: boolean;
+};
+
+/**
+ * The read for `/player/[id]` and `/compare`, which differ only in how many
+ * ids they pass. One round trip each way rather than a query per player.
+ */
+export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
+  if (playerIds.length === 0) {
+    // Still ask about membership: an empty id list and an outsider are
+    // different screens, and the caller cannot tell them apart otherwise.
+    const supabase = await createClient();
+    const membership = await supabase.rpc("is_league_member");
+    if (membership.error) throw membership.error;
+    return { cards: [], seasons: [], isMember: membership.data === true };
+  }
+
+  const supabase = await createClient();
+
+  const [membership, cards, seasons] = await Promise.all([
+    supabase.rpc("is_league_member"),
+    supabase.rpc("player_cards", {
+      p_player_ids: playerIds,
+      p_adp_season: ADP_SEASON,
+      p_stat_season: STAT_SEASON,
+      p_ceiling: CEILING,
+      p_floor: FLOOR,
+    }),
+    supabase.rpc("player_seasons", {
+      p_player_ids: playerIds,
+      p_ceiling: CEILING,
+      p_floor: FLOOR,
+    }),
+  ]);
+
+  if (membership.error) throw membership.error;
+  if (cards.error) throw cards.error;
+  if (seasons.error) throw seasons.error;
+
+  const isMember = membership.data === true;
+
+  return {
+    cards: isMember ? ((cards.data ?? []) as PlayerCard[]) : [],
+    seasons: isMember ? ((seasons.data ?? []) as SeasonRow[]) : [],
+    isMember,
+  };
+}
+
+/**
+ * One player, deduplicated across a render.
+ *
+ * `generateMetadata` needs the name and the page needs everything, and without
+ * this that is two identical round trips per player page. Keyed on the id
+ * string rather than wrapping `fetchPlayers` directly: `cache()` compares
+ * arguments by identity, and `[id]` is a fresh array on every call, so caching
+ * the array form would never hit.
+ */
+export const fetchPlayer = cache(async (playerId: string): Promise<PlayerData> => {
+  return fetchPlayers([playerId]);
+});

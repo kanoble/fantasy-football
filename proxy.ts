@@ -52,9 +52,15 @@ export async function proxy(request: NextRequest) {
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
+    // Capture the query before clearing it. `/compare?ids=a,b` is a shareable
+    // link, so the ids have to survive the round trip through Google — and
+    // cloning the request URL carries them onto /login itself, where they mean
+    // nothing, unless the search is reset first.
+    const target = pathname + url.search;
     url.pathname = "/login";
+    url.search = "";
     // Come back to whatever was asked for once signed in.
-    if (pathname !== "/") url.searchParams.set("next", pathname);
+    if (target !== "/") url.searchParams.set("next", target);
     return NextResponse.redirect(url);
   }
 

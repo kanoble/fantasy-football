@@ -25,6 +25,16 @@ export const AXIS_MAX = 56;
 export const CEILING = 20;
 export const FLOOR = 10;
 
+/**
+ * How many players `/compare` will put side by side.
+ *
+ * Three, because the plots share one axis and a fourth column pushes the shared
+ * scale narrow enough that the shapes stop being comparable — which is the only
+ * thing the screen is for. Extra ids in the URL are dropped rather than
+ * rendered small.
+ */
+export const MAX_COMPARE = 3;
+
 /** One row of `draft_board()`. */
 export type BoardRow = {
   player_id: string | null;
@@ -44,6 +54,35 @@ export type BoardRow = {
   weeks: number[] | null;
   points: number[] | null;
   career_games: number;
+};
+
+/**
+ * One row of `player_cards()`, which returns `draft_board()`'s shape for a
+ * named set of players rather than for the whole ADP list.
+ *
+ * `BoardRow` on purpose — the player page and the compare page draw the same
+ * plot from the same numbers, and a parallel-but-different type is how the two
+ * would drift — with one honest narrowing. A board row's `player_id` is
+ * nullable because an ADP name can resolve to nobody; a card is built outward
+ * from `player_index`, where the id is the primary key, so it always has one.
+ * That is why the card routes never render an `unmatched` state.
+ */
+export type PlayerCard = Omit<BoardRow, "player_id"> & { player_id: string };
+
+/** One row of `player_seasons()` — a single season of one player's career. */
+export type SeasonRow = {
+  player_id: string;
+  season: number;
+  games: number;
+  total: number;
+  median: number | null;
+  q1: number | null;
+  q3: number | null;
+  ceiling_weeks: number;
+  floor_weeks: number;
+  best: number | null;
+  weeks: number[] | null;
+  points: number[] | null;
 };
 
 /** One row of `scored_weekly_stats`, as returned by `player_week_log()`. */
@@ -79,6 +118,40 @@ export type WeekRow = {
   fg_made_60_: number | null;
   pat_made: number | null;
 };
+
+/**
+ * The slim row the pickers on `/player` and `/compare` search over.
+ *
+ * Deliberately without the weeks and points arrays: the board ships those
+ * because it draws them, and a list you are scanning for a name would carry
+ * ~15,000 floats it never renders. Derived from the same `draft_board()` read
+ * rather than a query of its own.
+ */
+export type PlayerOption = {
+  player_id: string;
+  name: string;
+  position: string | null;
+  team: string | null;
+  adp: number;
+  games: number;
+  median: number | null;
+};
+
+/**
+ * Fold a name to something a hurried search box can match. Strips accents and
+ * punctuation, so "amonra" finds Amon-Ra St. Brown and "jamarr" finds Ja'Marr
+ * Chase — the apostrophes and hyphens nobody types under time pressure during
+ * a draft.
+ *
+ * Shared by the board's find box and both pickers. Three copies of this is
+ * three subtly different ideas of what matches.
+ */
+export const normaliseName = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9 ]/g, "");
 
 export type Freshness = {
   last_success: string | null;

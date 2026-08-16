@@ -1,26 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import {
-  AXIS_MAX,
   CEILING,
   FLOOR,
+  MAX_COMPARE,
+  normaliseName,
   STAT_SEASON,
   rowState,
   type BoardRow,
 } from "@/lib/board";
 import { GameLog } from "./game-log";
-
-const GRIDLINES = [10, 20, 30, 40, 50];
-const AXIS_MARKS = [0, ...GRIDLINES, AXIS_MAX];
+import { Axis, Plot } from "./plot";
 
 /** Rows added per "show more". ~923 players have an ADP; 923 plots at once is
  *  ~15,000 absolutely-positioned dots, which is a real cost for rows nobody has
  *  scrolled to. A page comfortably clears the 192 picks of a 12-team draft. */
 const PAGE = 100;
 
-const pct = (value: number) => Math.max(0, Math.min(100, (value / AXIS_MAX) * 100));
 const f1 = (value: number | null | undefined) =>
   value == null || Number.isNaN(value) ? "—" : value.toFixed(1);
 
@@ -67,17 +66,6 @@ const PRESETS: { id: SortKey; label: string }[] = [
 
 const POSITIONS = ["QB", "RB", "WR", "TE", "K"];
 
-/** Fold a name to something a hurried search box can match. Strips accents and
- *  punctuation, so "amonra" finds Amon-Ra St. Brown and "jamarr" finds
- *  Ja'Marr Chase — the apostrophes and hyphens nobody types under time
- *  pressure during a draft. */
-const normalise = (value: string) =>
-  value
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9 ]/g, "");
-
 export function Board({ rows }: { rows: BoardRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>("adp");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(SORTS.adp.dir);
@@ -85,12 +73,15 @@ export function Board({ rows }: { rows: BoardRow[] }) {
   const [query, setQuery] = useState("");
   const [limit, setLimit] = useState(PAGE);
   const [open, setOpen] = useState<string | null>(null);
+  // Player ids staged for /compare. Held here rather than in the URL because a
+  // half-built comparison is not a place worth being able to navigate back to.
+  const [compare, setCompare] = useState<string[]>([]);
 
   const filtered = useMemo(() => {
-    const needle = normalise(query.trim());
+    const needle = normaliseName(query.trim());
     return rows.filter((row) => {
       if (position && (row.position ?? "").toUpperCase() !== position) return false;
-      if (needle && !normalise(row.name).includes(needle)) return false;
+      if (needle && !normaliseName(row.name).includes(needle)) return false;
       return true;
     });
   }, [rows, position, query]);
@@ -124,6 +115,23 @@ export function Board({ rows }: { rows: BoardRow[] }) {
     setSortDir(SORTS[key].dir);
     setLimit(PAGE);
   }
+
+  function toggleCompare(playerId: string) {
+    setCompare((current) =>
+      current.includes(playerId)
+        ? current.filter((id) => id !== playerId)
+        : // Silently dropping the oldest would lose a deliberate pick; the
+          // button that adds a fourth is disabled instead, so this is a guard
+          // rather than the mechanism.
+          current.length >= MAX_COMPARE
+          ? current
+          : [...current, playerId],
+    );
+  }
+
+  const staged = compare
+    .map((id) => rows.find((row) => row.player_id === id))
+    .filter((row): row is BoardRow => row != null);
 
   return (
     <div className="board">
@@ -208,23 +216,7 @@ export function Board({ rows }: { rows: BoardRow[] }) {
           <SortHeader current={sortKey} dir={sortDir} target="med" onSort={sortBy} />
           <SortHeader current={sortKey} dir={sortDir} target="iqr" onSort={sortBy} />
           <SortHeader current={sortKey} dir={sortDir} target="ceil" onSort={sortBy} />
-          <div className="axis" aria-hidden="true">
-            {AXIS_MARKS.map((mark, index) => (
-              <span
-                key={mark}
-                className={[
-                  mark === CEILING || mark === FLOOR ? "th" : "",
-                  index === 0 ? "first" : "",
-                  index === AXIS_MARKS.length - 1 ? "last" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                style={{ left: `${pct(mark)}%` }}
-              >
-                {mark}
-              </span>
-            ))}
-          </div>
+          <Axis />
           <div />
         </div>
 
@@ -235,6 +227,9 @@ export function Board({ rows }: { rows: BoardRow[] }) {
             ordinal={index + 1}
             expanded={open === rowKey(row)}
             onToggle={() => setOpen(open === rowKey(row) ? null : rowKey(row))}
+            staged={row.player_id != null && compare.includes(row.player_id)}
+            canStage={compare.length < MAX_COMPARE}
+            onStage={toggleCompare}
           />
         ))}
 
@@ -284,6 +279,37 @@ export function Board({ rows }: { rows: BoardRow[] }) {
           middle 50% of weeks
         </span>
       </div>
+
+      {/* Fixed to the viewport, not sticky inside the board: `.board` scrolls
+          horizontally, which makes it a scroll container in both axes, and a
+          sticky child of a container that never scrolls vertically just sits at
+          the bottom of the list where nobody scrolled to. */}
+      {staged.length > 0 ? (
+        <div className="tray" role="region" aria-label="Staged for comparison">
+          <span className="tray-lbl">Compare</span>
+          {staged.map((row) => (
+            <button
+              key={row.player_id}
+              className="tray-chip"
+              type="button"
+              onClick={() => toggleCompare(row.player_id as string)}
+              title={`Remove ${row.name}`}
+            >
+              {row.name} <span className="x">×</span>
+            </button>
+          ))}
+          {staged.length >= 2 ? (
+            <Link
+              className="tray-go"
+              href={`/compare?ids=${staged.map((row) => row.player_id).join(",")}`}
+            >
+              Compare {staged.length} &rsaquo;
+            </Link>
+          ) : (
+            <span className="tray-hint">pick one more</span>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -323,11 +349,17 @@ function Row({
   ordinal,
   expanded,
   onToggle,
+  staged,
+  canStage,
+  onStage,
 }: {
   row: BoardRow;
   ordinal: number;
   expanded: boolean;
   onToggle: () => void;
+  staged: boolean;
+  canStage: boolean;
+  onStage: (playerId: string) => void;
 }) {
   const state = rowState(row);
   const hasSeason = state === "ok";
@@ -377,38 +409,43 @@ function Row({
         <span className="num key">{hasSeason ? f1(row.median) : "—"}</span>
         <span className="iqr">{hasSeason ? `${f1(row.q1)}–${f1(row.q3)}` : "—"}</span>
         <span className="num dim">{hasSeason ? row.ceiling_weeks : "—"}</span>
-        <span className="plot">
-          {GRIDLINES.map((line) => (
-            <span
-              key={line}
-              className={`gl${line === CEILING || line === FLOOR ? " th" : ""}`}
-              style={{ left: `${pct(line)}%` }}
-            />
-          ))}
-          {hasSeason && row.q1 != null && row.q3 != null && row.median != null ? (
-            <>
-              <span
-                className="band"
-                style={{ left: `${pct(row.q1)}%`, width: `${pct(row.q3) - pct(row.q1)}%` }}
-              />
-              <span className="med" style={{ left: `${pct(row.median)}%` }} />
-              {(row.points ?? []).map((value, index) => (
-                <span
-                  key={`${index}-${value}`}
-                  className={`dot${value >= CEILING ? " hi" : value <= FLOOR ? " lo" : ""}`}
-                  style={{ left: `${pct(value)}%` }}
-                />
-              ))}
-            </>
-          ) : (
-            <span className="none">{emptyLabel}</span>
-          )}
-        </span>
+        <Plot
+          points={hasSeason ? row.points : null}
+          weeks={row.weeks}
+          median={row.median}
+          q1={row.q1}
+          q3={row.q3}
+          empty={emptyLabel}
+        />
         <span className="chev">{hasSeason ? "›" : ""}</span>
       </button>
 
       {expanded && row.player_id ? (
-        <GameLog playerId={row.player_id} name={row.name} />
+        <>
+          <GameLog playerId={row.player_id} name={row.name} />
+          {/* Outside the row button rather than inside it: a link and a toggle
+              nested in a button is invalid markup, and the browser's own
+              behaviour for it is not something to design around. */}
+          <div className="panel-actions">
+            <Link className="act" href={`/player/${row.player_id}`}>
+              Full career &amp; every week &rsaquo;
+            </Link>
+            <button
+              className="act"
+              type="button"
+              aria-pressed={staged}
+              disabled={!staged && !canStage}
+              onClick={() => onStage(row.player_id as string)}
+              title={
+                !staged && !canStage
+                  ? `Comparing ${MAX_COMPARE} already — drop one first`
+                  : undefined
+              }
+            >
+              {staged ? "✓ in comparison" : "Add to compare"}
+            </button>
+          </div>
+        </>
       ) : null}
     </>
   );
