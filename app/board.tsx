@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  ADP_SEASON,
   CEILING,
   FLOOR,
   MAX_COMPARE,
@@ -12,6 +13,7 @@ import {
   rowState,
   type BoardRow,
 } from "@/lib/board";
+import { clearDrafted, fetchDrafted, markDrafted, unmarkDrafted } from "@/lib/drafted";
 import { teamClass } from "@/lib/teams";
 import { GameLog } from "./game-log";
 import { Axis, Plot } from "./plot";
@@ -20,6 +22,18 @@ import { Axis, Plot } from "./plot";
  *  ~15,000 absolutely-positioned dots, which is a real cost for rows nobody has
  *  scrolled to. A page comfortably clears the 192 picks of a 12-team draft. */
 const PAGE = 100;
+
+/** How often the drafted marks are re-read while the tab is visible.
+ *
+ *  A draft pick lands about once a minute, so 15s is comfortably inside the
+ *  gap and cheap against a table with at most a few hundred rows. This is
+ *  deliberately a poll rather than Realtime: Realtime needs the table added to
+ *  the `supabase_realtime` publication, which is one line away if it is ever
+ *  needed, and cannot be verified from here. */
+const POLL_MS = 15_000;
+
+/** How long the "marked drafted · Undo" line stays up. */
+const UNDO_MS = 6_000;
 
 const f1 = (value: number | null | undefined) =>
   value == null || Number.isNaN(value) ? "—" : value.toFixed(1);
@@ -78,14 +92,68 @@ export function Board({ rows }: { rows: BoardRow[] }) {
   // half-built comparison is not a place worth being able to navigate back to.
   const [compare, setCompare] = useState<string[]>([]);
 
+  // Drafted state. `null` while the first read is in flight, so "not loaded
+  // yet" and "nobody has been drafted yet" are distinguishable — otherwise the
+  // count reads a confident 0 before it knows anything.
+  const [drafted, setDrafted] = useState<Set<string> | null>(null);
+  const [hideDrafted, setHideDrafted] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [undo, setUndo] = useState<{ key: string; name: string } | null>(null);
+
+  // Marks whose write has not landed yet, as norm_name -> intended state. The
+  // poll below would otherwise overwrite an optimistic toggle with a server
+  // read taken before the insert committed, and the row would flicker back
+  // under the reader's hand mid-draft.
+  const pending = useRef(new Map<string, boolean>());
+
+  const load = useCallback(() => {
+    fetchDrafted(ADP_SEASON)
+      .then((server) => {
+        const merged = new Set(server);
+        for (const [key, wanted] of pending.current) {
+          if (wanted) merged.add(key);
+          else merged.delete(key);
+        }
+        setDrafted(merged);
+        setDraftError(null);
+      })
+      .catch((error: unknown) => {
+        setDraftError(error instanceof Error ? error.message : String(error));
+      });
+  }, []);
+
+  useEffect(() => {
+    load();
+
+    // Visible-tab only. A backgrounded draft board is a tab nobody is reading,
+    // and polling it is a round trip per member per 15s for nothing.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    const timer = setInterval(onVisible, POLL_MS);
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
+
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [undo]);
+
   const filtered = useMemo(() => {
     const needle = normaliseName(query.trim());
     return rows.filter((row) => {
       if (position && (row.position ?? "").toUpperCase() !== position) return false;
       if (needle && !normaliseName(row.name).includes(needle)) return false;
+      if (hideDrafted && drafted?.has(row.norm_name)) return false;
       return true;
     });
-  }, [rows, position, query]);
+  }, [rows, position, query, hideDrafted, drafted]);
 
   const ordered = useMemo(() => {
     const { get } = SORTS[sortKey];
@@ -128,6 +196,72 @@ export function Board({ rows }: { rows: BoardRow[] }) {
           ? current
           : [...current, playerId],
     );
+  }
+
+  const draftedCount = drafted?.size ?? 0;
+
+  /**
+   * Mark or unmark a player, optimistically.
+   *
+   * The local set moves first and the write follows. A draft does not wait for
+   * a round trip, and a toggle that spins for 200ms is a toggle that gets
+   * pressed twice. On failure the change is reverted and the reason is shown,
+   * so a mark that did not stick never looks like one that did.
+   *
+   * Note what is deliberately absent: no `setLimit(PAGE)`. Every other filter
+   * here resets pagination, which is right when the reader changed what they
+   * are looking at — but marking a pick is not that, and being thrown back to
+   * the top 100 rows on every pick would be unusable.
+   */
+  async function toggleDrafted(row: BoardRow) {
+    const key = row.norm_name;
+    const wanted = !(drafted?.has(key) ?? false);
+
+    pending.current.set(key, wanted);
+    setDrafted((current) => {
+      const next = new Set(current ?? []);
+      if (wanted) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+    setDraftError(null);
+    // Only on the way in. Unmarking is itself the undo, and offering to undo an
+    // undo is noise.
+    setUndo(wanted ? { key, name: row.name } : null);
+
+    try {
+      if (wanted) await markDrafted(ADP_SEASON, key);
+      else await unmarkDrafted(ADP_SEASON, key);
+    } catch (error: unknown) {
+      setDrafted((current) => {
+        const next = new Set(current ?? []);
+        if (wanted) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      setUndo(null);
+      setDraftError(error instanceof Error ? error.message : String(error));
+    } finally {
+      pending.current.delete(key);
+    }
+  }
+
+  async function clearAll() {
+    const count = draftedCount;
+    if (!window.confirm(`Clear all ${count} drafted marks for ${ADP_SEASON}?`)) return;
+
+    const previous = drafted;
+    setDrafted(new Set());
+    setUndo(null);
+    setDraftError(null);
+
+    try {
+      await clearDrafted(ADP_SEASON);
+      pending.current.clear();
+    } catch (error: unknown) {
+      setDrafted(previous);
+      setDraftError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   const staged = compare
@@ -207,10 +341,31 @@ export function Board({ rows }: { rows: BoardRow[] }) {
             }}
           />
         </div>
+
+        {/* Deliberately does not reset pagination, unlike every other control
+            above it. Hiding drafted players is something you do once at the
+            start of a draft and then live with, not a change of subject. */}
+        <div className="control-group">
+          <span className="lbl">Draft</span>
+          <button
+            className="chip"
+            type="button"
+            aria-pressed={hideDrafted}
+            onClick={() => setHideDrafted(!hideDrafted)}
+          >
+            Hide drafted
+          </button>
+          {draftedCount > 0 ? (
+            <button className="chip" type="button" onClick={clearAll} title={`Clear all ${draftedCount} marks`}>
+              Clear {draftedCount}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid">
-        <div className="r r-head">
+        <div className="r brow r-head">
+          <div />
           <div />
           <div />
           <div>Player</div>
@@ -232,6 +387,8 @@ export function Board({ rows }: { rows: BoardRow[] }) {
             staged={row.player_id != null && compare.includes(row.player_id)}
             canStage={compare.length < MAX_COMPARE}
             onStage={toggleCompare}
+            drafted={drafted?.has(row.norm_name) ?? false}
+            onDraft={toggleDrafted}
           />
         ))}
 
@@ -240,10 +397,38 @@ export function Board({ rows }: { rows: BoardRow[] }) {
         ) : null}
       </div>
 
+      {/* Marking a player while "Hide drafted" is on makes them vanish, which is
+          the one failure mode of hiding rather than dimming. This is the way
+          back. It is not a toast: it sits in the flow above the footer so it
+          cannot cover a row you are about to click. */}
+      {undo ? (
+        <div className="undo" role="status">
+          <span>{undo.name} marked drafted</span>
+          <button
+            className="linkish"
+            type="button"
+            onClick={() => {
+              const row = rows.find((candidate) => candidate.norm_name === undo.key);
+              if (row) toggleDrafted(row);
+              setUndo(null);
+            }}
+          >
+            Undo
+          </button>
+        </div>
+      ) : null}
+
+      {draftError ? (
+        <div className="undo bad" role="alert">
+          <span>could not save that mark — {draftError}</span>
+        </div>
+      ) : null}
+
       <div className="board-foot">
         <span className="showing">
           showing {visible.length} of {ordered.length}
           {ordered.length !== rows.length ? ` (${rows.length} with an ADP)` : ""}
+          {draftedCount > 0 ? ` · ${draftedCount} drafted${hideDrafted ? ", hidden" : ""}` : ""}
         </span>
         {visible.length < ordered.length ? (
           <button className="more" type="button" onClick={() => setLimit(limit + PAGE)}>
@@ -360,6 +545,8 @@ function Row({
   staged,
   canStage,
   onStage,
+  drafted,
+  onDraft,
 }: {
   row: BoardRow;
   ordinal: number;
@@ -368,6 +555,8 @@ function Row({
   staged: boolean;
   canStage: boolean;
   onStage: (playerId: string) => void;
+  drafted: boolean;
+  onDraft: (row: BoardRow) => void;
 }) {
   const state = rowState(row);
   const hasSeason = state === "ok";
@@ -394,41 +583,58 @@ function Row({
 
   return (
     <>
-      <button
-        className={`r row ${teamClass(row.team)}`}
-        type="button"
-        aria-expanded={expanded}
-        disabled={!hasSeason}
-        onClick={onToggle}
-      >
-        <span className="stripe" aria-hidden="true" />
-        <span className="rank">{ordinal}</span>
-        <span className="who">
-          <span className="n">
-            {row.name}
-            {flag}
-          </span>
-          {/* Position lives here and only here. It used to be repeated as a
-              column immediately to the right, so "RB" sat next to "RB · DET". */}
-          <span className="t">
-            {row.position ?? "—"} · {row.team ?? "—"}
-            {hasSeason ? ` · ${row.games}g` : ""}
-          </span>
-        </span>
-        <span className="num dim">{f1(row.adp)}</span>
-        <span className="num key">{hasSeason ? f1(row.median) : "—"}</span>
-        <span className="iqr">{hasSeason ? `${f1(row.q1)}–${f1(row.q3)}` : "—"}</span>
-        <span className="num dim">{hasSeason ? row.ceiling_weeks : "—"}</span>
-        <Plot
-          points={hasSeason ? row.points : null}
-          weeks={row.weeks}
-          median={row.median}
-          q1={row.q1}
-          q3={row.q3}
-          empty={emptyLabel}
+      {/* The row is a wrapper grid rather than one button, because the drafted
+          toggle cannot live inside the row button: nesting a button in a button
+          is invalid markup — the same thing that already pushed `panel-actions`
+          outside — and the row button is `disabled` for rookies, unmatched and
+          absent players. Those are 307, 92 and 191 rows respectively, and they
+          include top-30 picks like Jeremiyah Love, so they are exactly the rows
+          that most need marking. The toggle is a sibling and always enabled. */}
+      <div className={`r brow ${teamClass(row.team)}${drafted ? " is-drafted" : ""}`}>
+        <button
+          className="mark"
+          type="button"
+          aria-pressed={drafted}
+          aria-label={drafted ? `${row.name} is drafted` : `Mark ${row.name} drafted`}
+          title={drafted ? `${row.name} is drafted — click to undo` : `Mark ${row.name} drafted`}
+          onClick={() => onDraft(row)}
         />
-        <span className="chev">{hasSeason ? "›" : ""}</span>
-      </button>
+        <button
+          className="row"
+          type="button"
+          aria-expanded={expanded}
+          disabled={!hasSeason}
+          onClick={onToggle}
+        >
+          <span className="stripe" aria-hidden="true" />
+          <span className="rank">{ordinal}</span>
+          <span className="who">
+            <span className="n">
+              {row.name}
+              {flag}
+            </span>
+            {/* Position lives here and only here. It used to be repeated as a
+                column immediately to the right, so "RB" sat next to "RB · DET". */}
+            <span className="t">
+              {row.position ?? "—"} · {row.team ?? "—"}
+              {hasSeason ? ` · ${row.games}g` : ""}
+            </span>
+          </span>
+          <span className="num dim">{f1(row.adp)}</span>
+          <span className="num key">{hasSeason ? f1(row.median) : "—"}</span>
+          <span className="iqr">{hasSeason ? `${f1(row.q1)}–${f1(row.q3)}` : "—"}</span>
+          <span className="num dim">{hasSeason ? row.ceiling_weeks : "—"}</span>
+          <Plot
+            points={hasSeason ? row.points : null}
+            weeks={row.weeks}
+            median={row.median}
+            q1={row.q1}
+            q3={row.q3}
+            empty={emptyLabel}
+          />
+          <span className="chev">{hasSeason ? "›" : ""}</span>
+        </button>
+      </div>
 
       {expanded && row.player_id ? (
         <>

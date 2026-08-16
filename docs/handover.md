@@ -25,11 +25,16 @@ been the one unexercised path for two sessions. The Yahoo integration is still
 stubbed, pending an API access application that has been submitted and is
 awaiting a decision.
 
-**The design pass is done for the board** and is on a branch with an open PR.
-Three directions were mocked against live data, one was chosen, and the
-consolidation it needed — one palette instead of three copies — is what made a
-working light/dark toggle possible. `/player` and `/compare` inherit the new
-system but have not been redesigned. See "The design pass, as built".
+**The design pass is done for the board and merged.** Three directions were
+mocked against live data, one was chosen, and the consolidation it needed — one
+palette instead of three copies — is what made a working light/dark toggle
+possible. `/player` and `/compare` inherit the new system but have not been
+redesigned. See "The design pass, as built".
+
+**The draft-day toggle is built and on a branch with an open PR.** Players can be
+marked drafted so the board tracks the room, which is the feature that turns a
+prep screen into a draft-day one. It is **the app's first write path** — every
+policy before it was read-only. See "The draft-day toggle, as built".
 
 ## Live infrastructure
 
@@ -119,7 +124,7 @@ Verified live on 2026-08-16.
 | `ff refresh` | **Working against real Postgres.** Full and incremental both exercised. |
 | `api/cron/refresh` deployed | **Working.** 401 without the secret, 200 and a full run with it. |
 | Daily cron | Registered and enabled. |
-| Supabase schema | Migrations `0001` and `0002` applied. 6 tables + allowlist. |
+| Supabase schema | Migrations `0001`–`0005` applied. 7 tables + allowlist. |
 | Google sign-in | Provider enabled; signups disabled; allowlist enforced in RLS. |
 | `scripts/smoke_test.py` | Working. All 4 no-auth sources green. |
 | `scoring/`, `sources/`, `analysis/` | Fully implemented. |
@@ -132,6 +137,7 @@ Verified live on 2026-08-16.
 | `draft_board()` / `player_week_log()` | Working. Verified under member and non-member JWTs. |
 | `player_cards()` / `player_seasons()` | Working. Same verification: member gets rows, non-member and email-less get zero, `anon` is refused. |
 | `data_freshness()` | Working. Powers the "data as of" line. |
+| **`drafted` table + write policies** | **Working, and the first write path.** Verified with HS256 JWTs across member, non-member, email-less and `anon`. |
 | Next.js + Python cron on one deployment | **Verified in production**, not assumed. `/api/cron/refresh` answers 401 rather than a redirect. |
 
 Published data as of the last run: 174,201 scored player-weeks, 10,146 players,
@@ -438,30 +444,59 @@ own. What remains:
 - **The mobile view is still a separate design**, not this one reflowed. A 64rem
   grid does not survive a phone. Now true of three screens rather than one.
 
-### Idea: mark players drafted, live, during the draft (logged 2026-08-16)
+### The draft-day toggle, as built
 
-Kevin's, and not yet scoped. **Toggle a player as drafted so they drop off the
-board**, so it tracks the room without any Yahoo connection. This is the feature
-that turns the board from a prep screen into a draft-day screen, and it needs no
-new data — only a per-player boolean and a filter.
+**Built 2026-08-16, on branch `draft-day`, with an open PR.** All three of the
+questions this was parked on are answered, and a fourth surfaced during
+exploration that mattered more than any of them.
 
-Three things to settle before building it:
+| Decision | Why |
+|---|---|
+| **A shared table, not `localStorage`** | *Drafted* is a fact about the room, not an opinion. It also survives switching device mid-draft, which is the benefit that is real today given the allowlist still holds one address. |
+| **Keyed on `(season, norm_name)`, not `player_id`** | 92 of the 923 ADP rows have no `player_id`, and **exactly one is inside the 192 picks of a 12-team draft** — Kenny Gainwell, ADP 110.8; the rest sit at 246+. Keying on `player_id` would have left one real, draftable player permanently unmarkable, and the only symptom would have been a button that silently did nothing. `norm_name` is unique across all 923 rows, so a mark is never ambiguous. |
+| **Hidden behind a chip, not greyed in place** | Kevin's call. The board shrinking is the point. The recoverability cost is paid by an inline **Undo** line, because a mark made while hiding is on makes a player vanish. |
+| **A toggle column, not a draft mode** | A mode whose mis-tap does the wrong thing is the classic modal error, and this is a two-hour high-stress window. |
+| **No record of who took them** | One boolean fact. The schema stays ignorant of the league having teams — see "Scope: draft prep first". Adding a column later to a small table is a plain `ALTER`. |
+| **A 15s visible-tab poll, not Realtime** | Realtime needs the table added to the `supabase_realtime` publication and cannot be verified without two browsers. One `alter publication` line away if it is ever wanted. |
 
-- **Where the state lives.** `localStorage` is free, needs no schema and no write
-  policy, and survives a refresh — but it is one browser only. A table is shared,
-  which is the better model because *drafted* is a fact about the room, not an
-  opinion: whoever marks it, everyone should see it. That makes it the **first
-  write path in the app**, so it needs an RLS `INSERT`/`DELETE` policy for
-  allowlisted members where every other policy today is read-only. No conflict
-  with the README's read-only guarantee — that is a promise about *Yahoo*, and
-  this writes only to our own table.
-- **Hide, or grey out.** A live draft is exactly where a mis-tap happens, and a
-  player who vanishes is hard to get back. A `drafted` pill plus a "hide drafted"
-  toggle is recoverable; deletion from the view is not.
-- **Whether it records *who* took them.** Storing the drafting team costs one
-  column and is the difference between "gone" and "gone to the guy picking two
-  after me", but it is also the first thing in the schema that knows the league
-  has teams — see "Scope: draft prep first".
+**`draft_board()` and `player_cards()` were recreated to return `norm_name`,**
+because the browser cannot derive it. `normalize_name()` in
+`ff/identity/crosswalk.py` strips generational suffixes ("Marvin Harrison Jr." →
+`marvin harrison`); `normaliseName` in `lib/board.ts` does not. They are
+different functions for different jobs — a join key and a search box — and the
+drafted table has to be keyed on the one the pipeline actually stored. Postgres
+cannot change a function's return type with `CREATE OR REPLACE`, so both are
+`DROP`ped and recreated in `0005`, and **dropping a function drops its grants**,
+which is why the `revoke`/`grant` pair is repeated there.
+
+**No foreign key to `adp_projections`, and that is load-bearing.**
+`replace_table()` runs `TRUNCATE adp_projections` on every refresh; a referencing
+FK aborts it outright, and `TRUNCATE ... CASCADE` would delete the draft.
+Verified rather than reasoned about: a mark was seeded, a real refresh was run,
+and both survived.
+
+**The toggle is a sibling of the row button, not a child.** The row button is
+`disabled` for rookies, unmatched and absent players — 307, 92 and 191 rows,
+including top-30 picks like Jeremiyah Love — which are precisely the rows most in
+need of marking. `.r` is itself the grid, so the row is now a wrapper and the
+button spans it through `grid-template-columns: subgrid`, keeping every existing
+cell in its column. `.row` is shared with the career table, so the restructure is
+scoped to a board-only `.brow` class.
+
+**A poll cannot clobber an in-flight mark.** A `pending` ref holds
+`norm_name → intended state` and is merged over every server read; without it the
+15s poll flips a just-pressed row back under the reader's hand.
+
+Still open on it:
+
+- **Nobody has used it in a real draft.** Every path is verified against the live
+  database and Kevin has seen it in a browser, but the thing it is for has not
+  happened yet.
+- **`/player` and `/compare` do not show drafted state.** Deliberate — the board
+  is the draft-day screen, and `player_cards()` starts at `player_index` with no
+  ADP guarantee.
+- **The other eleven have still not been added**, so "shared" is currently a
+  promise rather than an exercised path.
 
 ## Auth and access control
 
@@ -532,8 +567,10 @@ what `npm run dev` needs in the allowlist.
 2. **Nobody but Kevin has used the app.** Deliberate: he does not want the other
    eleven added until there is something he is ready to share. The board's
    design pass — which was the thing standing between here and that — is now
-   built and awaiting merge, so this is closer than it was. **Still do not add
-   them without being asked.**
+   merged and live, so the stated blocker is gone. **Still do not add them
+   without being asked.** This now also gates the drafted table's *shared* half:
+   with one address on the allowlist, "everyone sees the same board" is a
+   property nothing has exercised.
 
 3. **The layout has never been looked at in a browser by the machine that built
    it.** Data, routing, auth, RLS and server-rendered markup are all verified
@@ -663,6 +700,10 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **The plot lives in `app/plot.tsx`** | Three screens drawing the same axis from three copies of the arithmetic is how a fixed scale stops being fixed. |
 | **Search is client-side over the priced players** | Instant, no index, no round trip. The alternative needs `pg_trgm`. See "Routes". |
 | **Commit to `main`, branch only with a reason** | Linear history, solo repo. See "Git and deployment". |
+| **Drafted marks live in Postgres, not `localStorage`** | *Drafted* is a fact about the room, and it survives a device switch. See "The draft-day toggle, as built". |
+| **Drafted is keyed on `(season, norm_name)`** | One draftable player has no `player_id`. See the same section. |
+| **No FK from `drafted` to `adp_projections`** | The refresh truncates that table daily; an FK aborts it. |
+| **Drafted state is client state over a server-rendered board** | The board revalidates hourly; a mark has to appear the instant it is pressed. |
 
 ## Open questions
 
@@ -713,39 +754,43 @@ runtime via `/game/nfl` rather than hardcoding.
 
 ## Next steps, in the order I would do them
 
-1. **Merge the open PR, then re-check the cron.** `/player`, `/compare` and the
-   section nav are on a branch; merging deploys them. Migration `0004` is
-   *already* applied to the live database, so there is no schema step — it is
-   additive and nothing read it until this code shipped.
+The previous list's first two items — merging `player-compare` and
+`board-design` — are **done**, and both post-merge checks were re-run on
+production on 2026-08-16: `/api/cron/refresh` answers `401` with no redirect, and
+the board serves a `307` to `/login` when signed out.
 
-   **This PR changes `proxy.ts`**, so `/api/cron/refresh` must be confirmed
-   answering **401, not a redirect**, on production after merging:
+1. **Merge the `draft-day` PR.** Migration `0005` is *already* applied to the
+   live database. Production is safe in the meantime: the recreated
+   `draft_board()` returns one extra column, and the currently-deployed code
+   ignores it — a TypeScript cast is compile-time only.
 
-   ```bash
-   curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
-     https://fantasy-football-red.vercel.app/api/cron/refresh
-   ```
+   **This PR does not touch `proxy.ts`**, so the cron is not at risk this time.
+   What to check after merging is that a mark **round-trips in production** — the
+   write path has been exercised against the live database with hand-signed JWTs,
+   but never through a real browser session on the hosted origin.
 
-   It could not be checked on the branch's preview: **preview deployments sit
-   behind Vercel's deployment protection**, so every path — including the Python
-   function — answers a 302 to `vercel.com/sso-api` for an unauthenticated
-   caller. A browser signed in to Vercel sees the app fine; a `curl` cannot. That
-   is Vercel's gate, not the app's, and it means the cron check is a
-   post-merge step rather than a pre-merge one.
-2. **Merge `board-design`.** The board's design pass, the one palette and the
-   theme toggle. Kevin looked at it locally and approved before it was pushed.
-   It touches no route matcher, so the cron is not at risk this time — but it
-   does replace every token in `globals.css`, so the thing to check after
-   merging is that **production renders in both themes**, not that it builds.
+2. **Then rehearse a mock draft with it.** The feature has never met the thing it
+   is for. Mark thirty players, hide them, undo one, clear the board. This is
+   also the cheapest way to find out whether "hide" was the right call over
+   "grey out" while there is still time to change it.
+
 3. **Then add the other eleven league members** to `league_members`. Each needs
    pre-creating, because `disable_signup` blocks a first OAuth sign-in. **Do not
    do this before Kevin asks** — he has said explicitly he wants something he is
-   ready to share first.
-4. **Then the draft-day toggle**, if it still looks right: see "Idea: mark
-   players drafted, live, during the draft". It is the feature that turns this
-   from a prep screen into a draft-day screen.
+   ready to share first. Note this is now also what makes the drafted table's
+   *shared* half real rather than theoretical.
+
+4. **Consider the `/player` and `/compare` design pass**, which is the oldest
+   outstanding design debt: they inherit the board's tokens but their hierarchy
+   was never decided. See "Still owed on design".
+
 5. **In-season: run the Yahoo score diff** to close Q2 and Q3.
 6. **Then team defense** (Q4), once Q3 is settled.
+
+Worth doing at some point, and not urgent: **close the default grants on the
+other seven tables** (see "Things that will bite you"). Harmless today because
+they are all caches, but the reasoning that leaves them open is wrong about
+`TRUNCATE`.
 
 Not on this list, deliberately: **the sign-in branding**. Google shows
 `sebizyhnwgarnbukqkxu.supabase.co` because an unverified OAuth brand falls back
@@ -757,12 +802,43 @@ Testing, which disables the test-user list). **Deferred until onboarding**, and
 worth revisiting then because a domain would also replace
 `fantasy-football-red.vercel.app`.
 
-### Why this went through a PR
+### Why these went through a PR
 
 The standing rule is still commit-to-`main`, and it has not changed. Kevin asked
-for a PR on this one. The previous UI change also took a branch, for a different
-and now-historical reason: it was the first push that changed which framework
-Vercel builds the project with.
+for a PR on the design pass and again on the draft-day toggle. The first UI
+change also took a branch, for a different and now-historical reason: it was the
+first push that changed which framework Vercel builds the project with.
+
+Note the working shape this settled into: the work is committed to `main`
+locally, then moved onto a branch when a PR is wanted. Committing is cheap and
+local; **pushing is the outward-facing step**, and on this repo it is also the
+step that ships.
+
+## State as of the end of the 2026-08-16 draft-day session
+
+- **Production runs the merged board redesign (`9dbce48`).** Both post-merge
+  checks from the previous handover were re-run and passed: the cron answers
+  `401` with no redirect, and the board `307`s to `/login` signed out. The
+  served HTML carries the inline theme script and the compiled CSS carries all
+  four theme states, so the design pass is confirmed live.
+- **The draft-day toggle is built and on `draft-day`, with an open PR.**
+  Everything under "The draft-day toggle, as built" is in it.
+- **Migration `0005_drafted.sql` is applied to the live database**, the same way
+  `0001`–`0004` were, before the code that uses it shipped.
+- **The write path was verified against the live database with HS256 JWTs**: a
+  member inserts and deletes, a non-member and an email-less token are refused
+  the insert outright and read zero rows, and `anon` is refused all three.
+- **The `TRUNCATE` prediction was tested, not assumed**: a mark was seeded, a
+  real `ff refresh` was run, the refresh succeeded and the mark survived.
+- **A grants hole was found and closed on `drafted`**: Supabase's default
+  privileges had handed `authenticated` `TRUNCATE`, which no RLS policy is ever
+  consulted about. The other seven tables still carry it — see "Things that will
+  bite you".
+- `tsc`, `next build`, 56 Python tests and `ruff` all clean.
+- **Kevin confirmed the visual result locally**; the machine that built it still
+  has no browser.
+- **A `next dev` server may still be running on port 3000.**
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-16 design session
 
@@ -839,6 +915,23 @@ Vercel builds the project with.
   Auto-detection only runs for a *new* project; this one is remembered as a
   Python project. Without the pin the Next build succeeds and the deploy then
   fails looking for a `public` directory.
+
+- **Supabase grants `ALL` on every new table in `public` to `authenticated`, and
+  RLS is never consulted for `TRUNCATE`.** A `grant select, insert, delete` on a
+  new table is therefore a *no-op* — the table already arrives with `UPDATE`,
+  `TRUNCATE`, `TRIGGER` and `REFERENCES` as well. `UPDATE` is held closed by the
+  absence of an update policy, but **no policy is ever asked about `TRUNCATE`**,
+  so the table privilege is the only barrier. `0005` therefore revokes from
+  `authenticated` explicitly before re-granting. **Every other table still
+  carries the defaults** — harmless on tables the cron rebuilds every morning,
+  and worth closing anyway, because the reasoning that says "RLS has it covered"
+  is wrong for exactly one verb.
+
+- **A new table's write policy needs the non-member case exercised, not
+  assumed.** Read policies fail visibly — you get no rows. A missing or wrong
+  `with check` fails the other way. The HS256-JWT harness used for `0002`–`0005`
+  is the cheapest way to prove it: member inserts, non-member and email-less
+  tokens are refused, `anon` is refused everything.
 
 - **The service-role key bypasses RLS entirely.** It is now the single thing
   between the whole database and the internet. Everything in "Auth and access
