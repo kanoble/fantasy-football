@@ -65,6 +65,7 @@ export async function fetchBoard(): Promise<BoardData> {
 
 export type OptionsData = {
   options: PlayerOption[];
+  freshness: Freshness | null;
   isMember: boolean;
 };
 
@@ -83,10 +84,13 @@ export type OptionsData = {
  * 10,146 rows needs pg_trgm added first.
  */
 export async function fetchPlayerOptions(): Promise<OptionsData> {
-  const { rows, isMember } = await fetchBoard();
+  const { rows, freshness, isMember } = await fetchBoard();
 
   return {
     isMember,
+    // Carried through rather than re-read: every screen shows the same dateline,
+    // and this call already paid for it.
+    freshness,
     options: rows
       .filter((row): row is BoardRow & { player_id: string } => row.player_id != null)
       .map((row) => ({
@@ -106,6 +110,7 @@ export type PlayerData = {
   cards: PlayerCard[];
   /** Every season of every requested player, newest first. */
   seasons: SeasonRow[];
+  freshness: Freshness | null;
   isMember: boolean;
 };
 
@@ -118,14 +123,22 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
     // Still ask about membership: an empty id list and an outsider are
     // different screens, and the caller cannot tell them apart otherwise.
     const supabase = await createClient();
-    const membership = await supabase.rpc("is_league_member");
+    const [membership, freshness] = await Promise.all([
+      supabase.rpc("is_league_member"),
+      supabase.rpc("data_freshness"),
+    ]);
     if (membership.error) throw membership.error;
-    return { cards: [], seasons: [], isMember: membership.data === true };
+    return {
+      cards: [],
+      seasons: [],
+      freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
+      isMember: membership.data === true,
+    };
   }
 
   const supabase = await createClient();
 
-  const [membership, cards, seasons] = await Promise.all([
+  const [membership, cards, seasons, freshness] = await Promise.all([
     supabase.rpc("is_league_member"),
     supabase.rpc("player_cards", {
       p_player_ids: playerIds,
@@ -139,6 +152,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
       p_ceiling: CEILING,
       p_floor: FLOOR,
     }),
+    supabase.rpc("data_freshness"),
   ]);
 
   if (membership.error) throw membership.error;
@@ -150,6 +164,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
   return {
     cards: isMember ? ((cards.data ?? []) as PlayerCard[]) : [],
     seasons: isMember ? ((seasons.data ?? []) as SeasonRow[]) : [],
+    freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
     isMember,
   };
 }

@@ -21,7 +21,13 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Draft board",
+  // The league is the product; the page is the page. Same split the app bar
+  // makes on screen, so a browser tab reads "Compare · Noble Family Football"
+  // rather than naming one screen and never the app.
+  title: {
+    default: "Noble Family Football",
+    template: "%s · Noble Family Football",
+  },
   description: "Every NFL week scored in this league's terms.",
   robots: { index: false, follow: false },
 };

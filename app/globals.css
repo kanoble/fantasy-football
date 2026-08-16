@@ -251,29 +251,150 @@ code {
   gap: 1.5rem;
 }
 
-.masthead {
+/* ===========================================================================
+   The app bar — the league's chrome, and the same height on every screen
+
+   What this replaced put a *page* name ("Draft board") in the largest type on
+   screen, so the app had no name at all, and wedged the section nav above it
+   where it read as that title's subtitle. Two levels of identity had collapsed
+   into one. The bar holds what never changes; `.page-head` below holds what
+   does.
+
+   Note what is deliberately absent: a brand colour. The palette already spends
+   amber on the median, `--good` on good and `--bad` on bad, and a fourth claim
+   on a screen whose argument is that colour means something is one too many.
+   The crest is set in `--ink` and the amber bar under its initial is the whole
+   of the brand's colour. Same discipline on type: no third face.
+   =========================================================================== */
+
+.appbar {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 0.5rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  box-shadow: 0 1px 2px var(--shadow);
+}
+
+.lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: none;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 2px;
+}
+
+.lockup:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+}
+
+.crest {
+  display: block;
+  flex: none;
+}
+
+/* The initial knocks out to the surface behind the shield rather than being
+   painted on it, so the mark works on the bar, the sign-in card and anywhere
+   else `--panel` is the ground. */
+.crest-field {
+  fill: var(--ink);
+}
+
+.crest-letter {
+  fill: var(--panel);
+  font-family: var(--display);
+}
+
+.crest-bar {
+  fill: var(--amber);
+}
+
+.gate-card .crest {
+  align-self: flex-start;
+}
+
+.wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.wm-1 {
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.wm-2 {
+  font-family: var(--mono);
+  font-size: 0.53rem;
+  letter-spacing: 0.19em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.lockup:hover .wm-2 {
+  color: var(--dim);
+}
+
+.appbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex: none;
+}
+
+/* ===========================================================================
+   The page's own head — what this screen is, and how old its numbers are
+   =========================================================================== */
+
+.page-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   gap: 1.5rem;
   flex-wrap: wrap;
-  padding-bottom: 1.1rem;
+  padding-bottom: 1rem;
   border-bottom: 1px solid var(--firm);
   position: relative;
 }
 
-/* The masthead's only ornament: a hairline that fades out under the title. */
-.masthead::after {
+/* The one ornament, carried over from the old masthead: a hairline that fades
+   out under the title. On a page about one player it takes his team's hue, the
+   same way his row does on the board. */
+.page-head::after {
   content: "";
   position: absolute;
   left: 0;
   bottom: -1px;
   height: 1px;
   width: 11rem;
-  background: linear-gradient(to right, var(--amber), transparent);
+  background: linear-gradient(to right, var(--tm, var(--amber)), transparent);
 }
 
-.masthead h1 {
+.page-id {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.page-bar {
+  width: 4px;
+  flex: none;
+  background: var(--tm, var(--tm-none));
+  border-radius: 2px;
+}
+
+.page-head h1 {
   font-family: var(--display);
   font-size: var(--step-2);
   line-height: 1.05;
@@ -282,7 +403,7 @@ code {
   font-weight: 800;
 }
 
-.masthead .sub {
+.page-head .ctx {
   margin: 0.3rem 0 0;
   font-family: var(--mono);
   font-size: 0.66rem;
@@ -291,13 +412,29 @@ code {
   color: var(--muted);
 }
 
-.masthead .who-am-i {
+.page-aside {
   display: flex;
   align-items: center;
   gap: 0.9rem;
   flex-wrap: wrap;
   font-size: var(--step--1);
   color: var(--muted);
+}
+
+/* The dateline. Identical on all four screens on purpose — that is what makes
+   it a dateline rather than a caption, so there is one place to look for "how
+   current is this" whatever you are reading. */
+.dateline {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  border-radius: 2px;
+  padding: 0.22rem 0.5rem;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
@@ -367,39 +504,169 @@ code {
 }
 
 /* ===========================================================================
-   Section nav
+   Section tabs
+
+   Set in the text face rather than the mono one the old nav used: these are
+   words you read, not figures you compare, and mono-uppercase at 0.62rem is
+   what made them look like a caption.
+
+   `.tab-div` is unused today and deliberately kept. Board, Players and Compare
+   are one family — they are about *players*. League and Trends will be about
+   *teams*, and a hairline between the two groups says which family a section
+   belongs to before anyone reads a word. See `app/nav.tsx`.
    =========================================================================== */
 
-.nav {
+.tabs {
   display: flex;
-  gap: 0.15rem;
-  align-items: baseline;
-  margin-bottom: 0.55rem;
+  align-items: center;
+  gap: 0.1rem;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
-.nav-link {
-  font-family: var(--mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.tab {
+  font-size: 0.82rem;
+  font-weight: 500;
   color: var(--muted);
   text-decoration: none;
-  padding: 0.22rem 0.6rem;
-  border: 1px solid transparent;
+  padding: 0.32rem 0.62rem;
   border-radius: 2px;
+  white-space: nowrap;
 }
 
-.nav-link:hover {
+.tab:hover {
   color: var(--ink);
+  background: var(--panel-hi);
 }
 
-.nav-link[aria-current="page"] {
+.tab[aria-current="page"] {
   color: var(--ink);
-  border-color: var(--firm);
+  font-weight: 600;
+  background: var(--panel-hi);
+  box-shadow: inset 0 -2px 0 var(--amber);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.tab-div {
+  width: 1px;
+  height: 1.1rem;
+  background: var(--rule);
+  margin: 0 0.55rem;
+}
+
+/* ===========================================================================
+   The account menu
+
+   An email address, a theme control and a sign-out used to sit in the masthead
+   as peers of the section nav, which made the rarest action in the app as loud
+   as the screen you were on. Behind the avatar they are one target.
+   =========================================================================== */
+
+.acct {
+  position: relative;
+}
+
+.avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--firm);
+  background: var(--panel-hi);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.avatar:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+.avatar[aria-expanded="true"] {
+  color: var(--amber);
+  border-color: var(--amber-dim);
+}
+
+.avatar:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 40;
+  min-width: 15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 0.85rem;
   background: var(--panel);
+  border: 1px solid var(--firm);
+  border-radius: 3px;
+  box-shadow: 0 6px 20px var(--shadow);
 }
 
-.nav-link:focus-visible {
+.menu form {
+  margin: 0;
+}
+
+.menu-who {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+}
+
+.menu-lbl {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.menu-out {
+  font: inherit;
+  font-size: 0.82rem;
+  width: 100%;
+  text-align: left;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  padding: 0.6rem 0 0;
+  cursor: pointer;
+}
+
+.menu-out:hover {
+  color: var(--ink);
+}
+
+.menu-out:focus-visible {
   outline: 2px solid var(--amber);
   outline-offset: 2px;
 }

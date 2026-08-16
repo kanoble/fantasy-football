@@ -172,6 +172,40 @@ export type Freshness = {
 };
 
 /**
+ * The dateline: which season this is, and how old the numbers are.
+ *
+ * Identical on every screen, which is the point — it is a dateline rather than
+ * a caption, so there is one place to look for "how current is this" whether
+ * you are on the board or in a career.
+ *
+ * Reads `last_success` from `pipeline_runs`, never `pipeline_meta`'s
+ * `last_full_refresh`. The latter only moves on a *full* rebuild, and an
+ * incremental run republishes ADP and the current season without touching it —
+ * so a line reading that column would report data days older than it is.
+ *
+ * Returns the relative age only. The absolute stamp goes in a `title`, because
+ * pages revalidate hourly and a rendered "6h ago" can itself be an hour stale;
+ * `datelineStamp` below is what does not drift.
+ */
+export function dateline(freshness: Freshness | null): string {
+  const stamp = freshness?.last_success;
+  if (!stamp) return `${ADP_SEASON} season · data as of —`;
+
+  const hours = Math.floor((Date.now() - new Date(stamp).getTime()) / 3_600_000);
+  const age =
+    hours < 1 ? "just now" : hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
+
+  return `${ADP_SEASON} season · data ${age}`;
+}
+
+/** The unambiguous version of the above, for the `title` attribute. */
+export function datelineStamp(freshness: Freshness | null): string | undefined {
+  const stamp = freshness?.last_success;
+  if (!stamp) return undefined;
+  return `Last successful refresh ${new Date(stamp).toISOString().slice(0, 16).replace("T", " ")}Z`;
+}
+
+/**
  * Three states a row can be in that are not "a player with a season", and which
  * look identical on screen unless deliberately told apart.
  *
