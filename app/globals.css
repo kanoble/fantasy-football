@@ -468,6 +468,108 @@ code {
   gap: 0.75rem;
 }
 
+/* A board row: the same nine columns with a drafted toggle in front of them.
+   `.r` is itself the grid, so the toggle cannot be a child of the row button —
+   see the comment in app/board.tsx. The wrapper takes the template and the row
+   button spans the rest of it through subgrid, which keeps every existing cell
+   in exactly the column it was in. */
+.brow {
+  grid-template-columns: 1.5rem 3px 2rem 12.5rem 3.4rem 3.9rem 5.4rem 2.5rem 1fr 1.4rem;
+}
+
+.brow > .row {
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+
+/* The rule and the wash move to the wrapper so neither stops short of the left
+   edge — a hover that skipped the first column would read as a rendering fault
+   rather than as a narrower row. */
+.brow:not(.r-head) {
+  border-bottom: 1px solid var(--rule);
+}
+
+.brow > .row,
+.brow > .row:hover:not(:disabled),
+.brow > .row[aria-expanded="true"] {
+  border-bottom: 0;
+  background-image: none;
+}
+
+.brow:not(.r-head):has(> .row:hover:not(:disabled)) {
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--tm, var(--tm-none)) 12%, transparent),
+    transparent
+  );
+}
+
+.brow:not(.r-head):has(> .row[aria-expanded="true"]) {
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--tm, var(--tm-none)) 17%, transparent),
+    transparent
+  );
+  border-bottom-color: transparent;
+}
+
+/* Drafted, and not hidden. Dimmed rather than recoloured: a struck-through name
+   under a dropped opacity reads as "gone" without spending a hue, and the hues
+   on this screen already mean team. */
+.brow.is-drafted > .row {
+  opacity: 0.4;
+}
+
+.brow.is-drafted .who .n {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* The drafted toggle. Unchecked it is an empty well cut into the surface, so an
+   undrafted row reads as an open slot; checked it fills with the row's own team
+   hue, which is the same colour its dots are already drawn in. */
+.mark {
+  width: 0.95rem;
+  height: 0.95rem;
+  padding: 0;
+  justify-self: center;
+  cursor: pointer;
+  background: var(--panel);
+  border: 1px solid var(--firm);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 1px var(--groove-top);
+  position: relative;
+}
+
+.mark:hover {
+  border-color: var(--tm, var(--tm-none));
+}
+
+.mark[aria-pressed="true"] {
+  background: var(--tm, var(--tm-none));
+  border-color: var(--tm, var(--tm-none));
+  box-shadow: none;
+}
+
+.mark[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0.28rem;
+  top: 0.1rem;
+  width: 0.2rem;
+  height: 0.42rem;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.mark:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}
+
 /* season | G | total | median | iqr | 20+ | best | plot | chevron */
 .r-season {
   grid-template-columns: 5rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
@@ -1301,6 +1403,25 @@ table.log td.z {
   color: var(--faint);
   padding: 2.5rem 0;
   text-align: center;
+}
+
+/* The way back from a mark made while drafted rows are hidden. In the flow
+   rather than floating over the table: a toast would sit on top of the rows you
+   are about to click, which during a draft is the worst place to put anything. */
+.undo {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.7rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.76rem;
+  color: var(--dim);
+  background: var(--panel-hi);
+  border-left: 3px solid var(--amber);
+}
+
+.undo.bad {
+  border-left-color: var(--bad);
 }
 
 /* ===========================================================================

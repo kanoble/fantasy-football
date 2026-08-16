@@ -41,6 +41,18 @@ export type BoardRow = {
   name: string;
   position: string | null;
   team: string | null;
+  /**
+   * The key a drafted mark is stored under — `adp_projections`' own primary key
+   * alongside `season`, and never shown to anyone.
+   *
+   * It comes from the server rather than being derived here because it cannot
+   * be: `normalize_name()` in `ff/identity/crosswalk.py` strips generational
+   * suffixes ("Marvin Harrison Jr." → "marvin harrison") and `normaliseName`
+   * below does not. They are different functions for different jobs — one is a
+   * join key, the other serves a hurried search box — and the drafted table has
+   * to be keyed on the one the pipeline actually stored.
+   */
+  norm_name: string;
   adp: number;
   projected_points: number | null;
   injury_status: string | null;
