@@ -82,12 +82,12 @@ def cmd_rules(args: argparse.Namespace) -> int:
 
 def cmd_refresh(args: argparse.Namespace) -> int:
     """Run the publish pipeline by hand — same code path Vercel Cron uses."""
-    import os
+    from ff.config import DSN_ENV_VARS, resolve_dsn
 
-    dsn = args.dsn or os.environ.get("SUPABASE_DB_URL")
+    dsn = args.dsn or resolve_dsn()
     if not dsn:
         print(
-            "error: no database URL. Pass --dsn or set SUPABASE_DB_URL.",
+            f"error: no database URL. Pass --dsn or set {' or '.join(DSN_ENV_VARS)}.",
             file=sys.stderr,
         )
         return 2

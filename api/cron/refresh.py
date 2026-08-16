@@ -51,13 +51,14 @@ class handler(BaseHTTPRequestHandler):  # noqa: N801 — Vercel requires this na
             self._respond(401, {"error": "unauthorized"})
             return
 
-        dsn = os.environ.get("SUPABASE_DB_URL")
-        if not dsn:
-            self._respond(500, {"error": "SUPABASE_DB_URL is not set"})
-            return
-
         try:
+            from ff.config import DSN_ENV_VARS, resolve_dsn
             from ff.pipeline import run_refresh
+
+            dsn = resolve_dsn()
+            if not dsn:
+                self._respond(500, {"error": f"no database URL: set {' or '.join(DSN_ENV_VARS)}"})
+                return
 
             result = run_refresh(dsn)
             self._respond(200, {"status": "ok", **result})

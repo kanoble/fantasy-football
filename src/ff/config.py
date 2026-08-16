@@ -25,6 +25,27 @@ def _env_path(name: str, default: Path) -> Path:
     return Path(raw).expanduser() if raw else default
 
 
+# The Vercel Supabase integration provisions both POSTGRES_URL (Supavisor
+# transaction pooler, :6543) and POSTGRES_URL_NON_POOLING (session mode, :5432).
+# The refresh COPYs ~174k rows inside one explicit transaction and psycopg3
+# issues prepared statements by default; neither survives a transaction-mode
+# pooler, so the non-pooling URL is the correct one here.
+#
+# SUPABASE_DB_URL is checked first so an explicit override still wins. Falling
+# back to the integration-managed variable — rather than copying its value into
+# a second env var — means a Supabase credential rotation propagates by itself.
+DSN_ENV_VARS = ("SUPABASE_DB_URL", "POSTGRES_URL_NON_POOLING")
+
+
+def resolve_dsn() -> str | None:
+    """First Postgres URL set in :data:`DSN_ENV_VARS`, or None if none are."""
+    for name in DSN_ENV_VARS:
+        value = os.getenv(name)
+        if value:
+            return value
+    return None
+
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime configuration.
