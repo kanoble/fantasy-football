@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { CEILING, FLOOR, STAT_SEASON, type WeekRow } from "@/lib/board";
 import { LEAGUE_RULES, decompose, type StatRule } from "@/lib/scoring";
@@ -25,10 +25,14 @@ export function GameLog({
   playerId,
   name,
   season = STAT_SEASON,
+  tone = "",
 }: {
   playerId: string;
   name: string;
   season?: number;
+  /** The player's `tm-*` class, so the panel's left edge and the dots in the
+   *  row above it are the same colour. Empty for a player with no team. */
+  tone?: string;
 }) {
   const [weeks, setWeeks] = useState<WeekRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +62,7 @@ export function GameLog({
 
   if (error) {
     return (
-      <div className="panel">
+      <div className={`panel ${tone}`}>
         <div className="panel-title">Could not load {name}&rsquo;s game log — {error}</div>
       </div>
     );
@@ -66,7 +70,7 @@ export function GameLog({
 
   if (!weeks) {
     return (
-      <div className="panel">
+      <div className={`panel ${tone}`}>
         <div className="panel-title">Loading {season} game log…</div>
       </div>
     );
@@ -74,7 +78,7 @@ export function GameLog({
 
   if (weeks.length === 0) {
     return (
-      <div className="panel">
+      <div className={`panel ${tone}`}>
         <div className="panel-title">No {season} regular-season weeks.</div>
       </div>
     );
@@ -91,7 +95,47 @@ export function GameLog({
   const sum = decompose(best);
 
   return (
-    <div className="panel">
+    <div className={`panel ${tone}`}>
+      {/* The arithmetic leads. It is the app's whole argument — that a score can
+          be *shown* rather than asserted — and it was previously set smaller
+          than the table above it, under a heading, as though it were a note. */}
+      <div className="panel-top">
+        <span className="panel-title">
+          Best week · how week {best.week} reaches {f1(best.fantasy_points)}
+        </span>
+        {sum.agrees ? (
+          <span className="checks">✓ matches the stored score</span>
+        ) : null}
+      </div>
+
+      <div className="maths">
+        {sum.terms.map((term, index) => (
+          <Fragment key={term.rule.name}>
+            {index > 0 ? <span className="eq">+</span> : null}
+            <span className="term">
+              <b>
+                {term.units}
+                <span className="eq"> × </span>
+                {term.rule.pointsPerUnit}
+              </b>
+              <span>{term.rule.short}</span>
+            </span>
+          </Fragment>
+        ))}
+        <span className="eq">=</span>
+        <span className="tot">{f1(sum.computed)}</span>
+      </div>
+
+      {/* The arithmetic is reconstructed in TypeScript from a copy of the Python
+          rules. If the two ever disagree, say so rather than showing a confident
+          wrong sum. */}
+      {!sum.agrees ? (
+        <div className="checks bad">
+          ⚠ these rules reconstruct {f1(sum.computed)} but the pipeline stored{" "}
+          {f1(sum.stored)} — lib/scoring.ts has drifted from ff.scoring.rules
+        </div>
+      ) : null}
+
       <div className="panel-title">
         {season} game log · {weeks.length} games
       </div>
@@ -118,7 +162,9 @@ export function GameLog({
                     ? "lo"
                     : "";
               return (
-                <tr key={week.week}>
+                // The week the arithmetic above is explaining, marked so the
+                // sum and its source are visibly the same row.
+                <tr key={week.week} className={week.week === best.week ? "sel" : undefined}>
                   <td>wk {week.week}</td>
                   {columns.map((rule) => {
                     const units = unitsFor(week, rule);
@@ -136,34 +182,6 @@ export function GameLog({
         </table>
       </div>
 
-      <div>
-        <div className="panel-title" style={{ marginBottom: "0.35rem" }}>
-          Best week · how week {best.week} scored {f1(best.fantasy_points)}
-        </div>
-        <div className="maths">
-          {sum.terms.map((term, index) => (
-            <span key={term.rule.name}>
-              {index > 0 ? <span className="eq">+ </span> : null}
-              <span className="term">
-                {term.units} {term.rule.short} <span className="eq">×</span>{" "}
-                {term.rule.pointsPerUnit} <span className="eq">=</span> {f1(term.points)}
-              </span>
-            </span>
-          ))}
-          <span className="eq">→</span>
-          <span className="tot">{f1(sum.computed)}</span>
-        </div>
-
-        {/* The arithmetic is reconstructed in TypeScript from a copy of the
-            Python rules. If the two ever disagree, say so rather than showing a
-            confident wrong sum. */}
-        {!sum.agrees ? (
-          <div className="panel-title" style={{ color: "#C15F52", marginTop: "0.4rem" }}>
-            ⚠ these rules reconstruct {f1(sum.computed)} but the pipeline stored{" "}
-            {f1(sum.stored)} — lib/scoring.ts has drifted from ff.scoring.rules
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }

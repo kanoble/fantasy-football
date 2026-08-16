@@ -10,6 +10,7 @@ import {
   normaliseName,
   type PlayerOption,
 } from "@/lib/board";
+import { teamClass } from "@/lib/teams";
 
 /** Enough to browse without paging, few enough to render instantly. The search
  *  box is the way past it, which is the point: this is a find, not a list. */
@@ -173,6 +174,7 @@ export function Picker({
 
           <div className="pick-list">
             <div className="pick pick-head">
+              <div />
               <div>Player</div>
               <div>Pos</div>
               <div>ADP</div>
@@ -184,6 +186,7 @@ export function Picker({
               const on = chosen.includes(option.player_id);
               const body = (
                 <>
+                  <span className="stripe" aria-hidden="true" />
                   <span className="pn">{option.name}</span>
                   <span className="num dim">{option.position ?? "—"}</span>
                   <span className="num dim">{f1(option.adp)}</span>
@@ -199,7 +202,7 @@ export function Picker({
               return mode === "link" ? (
                 <Link
                   key={option.player_id}
-                  className="pick prow"
+                  className={`pick prow ${teamClass(option.team)}`}
                   href={`/player/${option.player_id}`}
                 >
                   {body}
@@ -207,7 +210,7 @@ export function Picker({
               ) : (
                 <button
                   key={option.player_id}
-                  className="pick prow"
+                  className={`pick prow ${teamClass(option.team)}`}
                   type="button"
                   aria-pressed={on}
                   disabled={!on && chosen.length >= MAX_COMPARE}

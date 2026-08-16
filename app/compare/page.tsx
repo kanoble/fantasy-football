@@ -14,8 +14,10 @@ import { fetchPlayerOptions, fetchPlayers } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 import { Nav } from "../nav";
 import { NotOnList } from "../not-on-list";
+import { teamClass } from "@/lib/teams";
 import { Picker } from "../picker";
 import { Axis, Plot } from "../plot";
+import { ThemeToggle } from "../theme";
 
 export const metadata: Metadata = { title: "Compare" };
 
@@ -158,6 +160,7 @@ export default async function ComparePage({
         </div>
         <div className="who-am-i">
           <span>{user?.email}</span>
+          <ThemeToggle />
           <form action="/auth/signout" method="post">
             <button className="linkish" type="submit">
               Sign out
@@ -211,7 +214,10 @@ export default async function ComparePage({
               {cards.map((card) => {
                 const state = rowState(card);
                 return (
-                  <div className="r r-compare crow" key={card.player_id}>
+                  <div
+                    className={`r r-compare crow ${teamClass(card.team)}`}
+                    key={card.player_id}
+                  >
                     <span className="who">
                       <span className="n">{card.name}</span>
                       <span className="t">
