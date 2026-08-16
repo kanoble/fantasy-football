@@ -16,11 +16,12 @@ into a pure function, and apply that to nflverse box scores — which scores
 *every player in the NFL* in this league's terms, not just rostered ones. The
 backend is now live and hosted: a Python pipeline publishes to Supabase Postgres
 on a daily Vercel Cron, and 174,201 scored player-weeks are sitting in the
-database right now. **There is still no UI, but it is now designed** — a
-direction is chosen and specified down to fonts and sort semantics, so the next
-session builds rather than decides. See "The UI is the next body of work". The
-Yahoo integration is still stubbed, pending an API access application that has
-been submitted and is awaiting a decision.
+database right now. **The board is now built** — a Next.js app at the repo root,
+reading those tables as plain SQL with no Python at request time, gated behind
+Google sign-in and the same allowlist the database enforces. It has not yet been
+signed into by a human: see "What is genuinely unverified". The Yahoo
+integration is still stubbed, pending an API access application that has been
+submitted and is awaiting a decision.
 
 ## Live infrastructure
 
@@ -60,6 +61,16 @@ are gitignored, so they do not survive a fresh clone:
 |---|---|
 | `.vercel/project.json` | `vercel link --scope noble21 --project fantasy-football --yes` |
 | `.env.local` | `vercel env pull` (after linking) |
+
+The web app needs `npm install` as well as `uv sync`; `.env.local` is what Next
+reads for `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, so
+`vercel env pull` has to have run before `npm run dev` will start.
+
+```bash
+npm install
+npm run dev          # http://localhost:3000
+npm run lint         # tsc --noEmit
+```
 
 ### Git and deployment
 
@@ -106,35 +117,112 @@ Verified live on 2026-08-16.
 | `scoring/`, `sources/`, `analysis/` | Fully implemented. |
 | Test suite | 56 tests, all passing. `uv run pytest` |
 | Lint | Clean. `uv run ruff check .` |
-| **Web UI** | **Does not exist.** |
+| **Web UI — the board** | **Built.** Renders 923 ADP rows against live data. Not yet signed into by a real Google account. |
+| `draft_board()` / `player_week_log()` | Working. Verified under member and non-member JWTs. |
+| `data_freshness()` | Working. Powers the "data as of" line. |
+| Next.js + Python cron on one deployment | **Verified on a preview deployment**, not assumed. |
 
 Published data as of the last run: 174,201 scored player-weeks, 10,146 players,
 3,251 ADP rows, 5 injury items.
 
-## The UI is the next body of work
+## The UI, as built
 
-The expensive half is done, and the read path is thinner than it looks. Every
-metric `ff compare` produces was reproduced exactly as plain SQL over
-`scored_weekly_stats` — 2025 Bijan Robinson returns 17 games / 370.8 / 21.8 ppg
-/ 10.3 std / 39.9 best / 9 ceiling weeks / 3 floor weeks by both routes. So the
-UI needs **no Python at request time**, no nflverse download, no Polars, no
-scoring engine. It queries a table.
+The read path turned out as thin as predicted: **no Python at request time**, no
+nflverse download, no Polars, no scoring engine. Three SQL functions in
+`supabase/migrations/0003_board.sql` are the whole thing.
 
-Three things to know before starting:
+| Function | Returns | Notes |
+|---|---|---|
+| `draft_board(adp, stat, ceiling, floor)` | 923 rows, one per player with an ADP | Median/IQR via `percentile_cont`, plus **every week's points as an array** so the plot can draw a dot per game |
+| `player_week_log(player_id, season)` | One player's weeks, all 22 rule columns | Fetched only when a row is expanded |
+| `data_freshness()` | Two timestamps and the rules fingerprint | See "Staleness needed more than a policy" |
 
-1. **`compare_players()` cannot be reused as-is.** It calls
-   `nflverse.load_weekly_stats()` and scores in-process at request time. Correct
-   for a CLI, wrong for a web app. The queries get written fresh against the
-   published tables.
-2. **Next.js goes at the repo root**, alongside `api/`, `src/ff/` and
-   `pyproject.toml`. This was tested, not assumed: a throwaway deployment with
-   Next.js App Router, a root `pyproject.toml` and `api/cron/refresh.py` served
-   all three routes correctly, detected `nextjs` as the framework, registered
-   the cron, *and* installed the Python dependencies. The "framework preset takes
-   precedence over file-based functions" rule applies only to **Python** presets.
-3. **Query by `player_id`, not `player_name`.** Resolve the name in
-   `player_index` (indexed on `norm_name`), then hit `scored_weekly_stats` via
-   `idx_scored_player_season`. There is no index on `player_name`.
+All three are `SECURITY INVOKER` except `data_freshness()`, so the allowlist
+policies still apply unchanged. Verified with HS256 JWTs: a member gets 923 rows,
+a non-member gets **zero rows from every one of them**, including the
+security-definer one, which re-checks membership itself.
+
+### Two things that were wrong in the last handover
+
+Both were reasonable inferences that a real deployment disproved. They are
+recorded because the reasoning that produced them will recur.
+
+1. **Framework auto-detection does not apply here.** The previous entry said a
+   throwaway deployment "detected `nextjs` as the framework". True — for a *new*
+   project. This project was created as a Python one long before there was a UI,
+   and its stored preset won: the Next build succeeded and the deploy then failed
+   with *No Output Directory named "public"*. Fixed by pinning
+   `"framework": "nextjs"` in `vercel.json`, which is now the source of truth
+   rather than a dashboard setting nobody can see from the repo.
+
+2. **A catch-all proxy matcher silently kills the cron.** `api/` is the Vercel
+   Python function, not a Next route, and the daily cron calls it with no
+   session. The first preview answered `/api/cron/refresh` with a **307 to
+   `/login`** instead of running. That failure is close to invisible — Vercel
+   sees a redirect rather than an error, `pipeline_runs` gets no row at all, and
+   the only symptom is a board whose data quietly stops moving. `proxy.ts` now
+   excludes `api/`, verified returning its own `401 {"error":"unauthorized"}`.
+   **Any new matcher, rewrite or redirect needs the same exclusion.**
+
+### Design decisions carried through unchanged
+
+Everything under "Design decisions, settled" below was implemented as specified,
+and the numbers were checked against the spec rather than assumed: Taylor's 16.9
+median, Jefferson's 12.5 median with exactly one ceiling week and a 7.1-wide IQR,
+McCaffrey's 10.5 around 24.1, and Gibbs's 55.4 setting the fixed 0–56 axis. All
+reproduce exactly from SQL.
+
+### The scoring rules are duplicated in TypeScript, on purpose
+
+`lib/scoring.ts` mirrors `ff.scoring.rules.LEAGUE_SCORING`. Duplication across
+languages is normally a mistake; it is here because the board's whole argument is
+that a score can be **shown as arithmetic**, and the read path deliberately runs
+no Python.
+
+It is checked rather than trusted. `decompose()` returns the sum it reaches
+alongside the value Postgres stored, and the panel renders a visible warning if
+they disagree instead of showing confident wrong arithmetic. Measured across
+**1000 player-weeks spanning 24 positions: zero disagreements, worst delta
+0.000000**, including the spec's own example — Bijan's week 17,
+`195×0.1 + 1×6 + 5×1.0 + 34×0.1 + 1×6 = 39.9`.
+
+**If you change the Python rules, change this file too.** The fingerprint
+mechanism does not cover it: it protects the stored scores, not the browser's
+reconstruction of them.
+
+### Staleness needed more than a policy
+
+The previous handover called `pipeline_meta`'s missing read policy an oversight,
+which it was — but adding one is not enough to answer "how old is this?".
+`last_full_refresh` only moves on a **full** rebuild, and an incremental run
+republishes ADP and the current season without touching it. A "data as of" line
+reading that column would have shown a date days stale while the data underneath
+was hours old.
+
+The truthful timestamp is the last successful `pipeline_runs` row, and that table
+stays closed on purpose — error strings and row counts are operational. So it is
+exposed through `data_freshness()`, a security-definer function returning exactly
+two timestamps and a fingerprint, which re-checks the allowlist itself because
+security definer bypasses the RLS that would otherwise do it.
+
+### Things a future session should know about the code
+
+- **`lib/board.ts` holds types and constants; `lib/queries.ts` holds the server
+  fetch.** They are split because `server-only` turned a shared module into a
+  build error the moment a client component imported it. That is the guard
+  working: it is the same class of mistake as leaking the service-role key.
+- **Query by `player_id`, not `player_name`.** There is no index on
+  `player_name`. `player_index` is indexed on `norm_name`.
+- **`POSITION` is a reserved word** in a `RETURNS TABLE` column list. It has to
+  be quoted, and is.
+- **Three empty-row states are distinguished**, because they look identical
+  otherwise: `unmatched` (ADP name resolved to nobody — flagged red, it is the
+  one that is a *lie*), `rookie` (no NFL week ever), and `absent` (has a career,
+  played none of 2025). The last is new — the previous design treated a veteran
+  who missed the season as a rookie. Currently 92 unmatched, 307 rookie, 191
+  absent, 78 carrying an injury flag.
+- **`compare_players()` was not reused**, as predicted. It scores in-process from
+  nflverse at request time, which is right for a CLI and wrong for a web app.
 
 ### Scope: draft prep first
 
@@ -199,17 +287,26 @@ Found by querying the live tables, not by imagining edge cases.
 
 ### Still open on the UI
 
-- **`pipeline_meta` has RLS enabled and no read policy**, so the app cannot read
-  it and a "data as of…" line is impossible today. The schema comment only
-  documents `pipeline_runs` as deliberately closed, so this looks like an
-  oversight rather than a decision. A staleness indicator needs a policy.
+Three of the five items that were here are now done: the staleness policy (see
+"Staleness needed more than a policy"), pagination, and the position filter and
+search — the last two built as controls on the board, as specified, not as
+routes. What remains:
+
 - **The 20-point ceiling and 10-point floor are inherited from the CLI**
   (`CEILING_THRESHOLD`, `FLOOR_THRESHOLD` in `analysis/compare.py`). Reasonable
   for a skill player, wrong for a quarterback. They probably want to vary by
-  position once quarterbacks are on the board.
-- **~923 players have an ADP.** That many absolutely-positioned plots needs
-  virtualised rows or pagination; the mockup shows fifteen.
-- **Position filter and search** are controls on the board, not new routes.
+  position once quarterbacks are on the board. They are now **parameters of
+  `draft_board()`** rather than hardcoded, so varying them is a call-site change
+  and not a migration.
+- **Pagination is 100 rows at a time, not virtualised.** Enough to clear the 192
+  picks of a 12-team draft in two clicks, and it keeps sorting instant because
+  all 923 rows are already in memory — only the rendering is bounded. If it ever
+  feels slow, virtualise the rows; do not start paging the query.
+- **`/player/[id]` and `/compare` are not built.** The board is the screen draft
+  prep actually needs and it is finished; those two were always the next tier.
+  `player_week_log()` already returns what a player page would render.
+- **The mobile view is still a separate design**, not this one reflowed. A 64rem
+  grid does not survive a phone.
 
 ## Auth and access control
 
@@ -256,25 +353,49 @@ from list to dict when they hold one item. Guessing produces confident wrong
 parsers. Capture one real payload into `tests/fixtures/` and implement against
 it.
 
-## Unverified — treat with suspicion
+## What is genuinely unverified
 
-Two items that used to head this list are now verified and have moved to "what
-works": the database write path, and the deployed cron endpoint. What remains:
+Read this before assuming the UI is finished.
 
-1. **Yahoo stat IDs** in `YAHOO_STAT_ID_TO_NFLVERSE` are the widely-circulated
+1. **Nobody has actually signed in.** This is the big one, and it is the one
+   thing this session could not do for itself: Google OAuth needs a human at a
+   consent screen. Everything *behind* the session is verified — the RPCs were
+   exercised with real HS256 JWTs for a member and a non-member, and the board
+   was rendered from the real 923 rows — but the sign-in flow itself has never
+   run end to end. **Step 1 of "next steps" is to sign in.** Expect the
+   redirect-URL problem below to surface there or nowhere.
+
+2. **Supabase redirect URL configuration is still unverified**, for the same
+   reason it was last session: Site URL and the redirect allowlist were set by
+   hand and are not exposed on any API this project can read. A mistake surfaces
+   at first sign-in as a bounce to a dead localhost address *after* Google
+   succeeds — confusing, because the Google half looks fine. The callback at
+   `app/auth/callback/route.ts` now surfaces `error_description` on the login
+   page rather than failing blankly, which should make it a two-minute diagnosis
+   instead of an afternoon.
+
+   `npm run dev` serves on **port 3000**, so `http://localhost:3000/**` is what
+   the Supabase redirect allowlist needs. (This session ran it on 3111 to avoid
+   colliding with anything already bound; if you do the same, that port needs
+   allowlisting too.)
+
+3. **`disable_signup` blocks the first OAuth sign-in.** `kanoble@gmail.com` is
+   pre-created, so this should be fine for you — but it is the most likely
+   failure for anyone else, and the callback now reports it in words.
+
+4. **Yahoo stat IDs** in `YAHOO_STAT_ID_TO_NFLVERSE` are the widely-circulated
    values, never checked against a live payload. Not on the critical path.
 
-2. **Fuzzy identity matching accuracy is unmeasured.** The *need* is confirmed
-   (below); how well it works is not. Note that the ADP-side name match has now
-   been given a position gate after it resolved three top-40 players to their
-   namesakes — see "Namesakes broke the ADP join". The Yahoo-side resolver has
-   not had the same treatment because it is still stubbed.
+5. **Fuzzy identity matching accuracy is unmeasured.** The *need* is confirmed
+   (below); how well it works is not. The ADP-side match has a position gate
+   after it resolved three top-40 players to their namesakes — see "Namesakes
+   broke the ADP join". The Yahoo-side resolver has not had the same treatment
+   because it is still stubbed.
 
-3. **Supabase redirect URL configuration is unverified.** Site URL and the
-   redirect allowlist were set by hand and are not exposed on any API this
-   project can read. A mistake surfaces at first sign-in as a bounce to a dead
-   localhost address *after* Google succeeds — a confusing failure, because the
-   Google half looks fine.
+   The board makes the remaining damage visible rather than fixing it: 92 of the
+   923 ADP rows resolve to nobody and now render with a red **no match** pill.
+   That is a measurement, not a defect list — most are genuinely not NFL
+   players — but it is the place to look if a name you expect is blank.
 
 ## Upstream data has holes, and the schema rejects them
 
@@ -372,6 +493,10 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **Next.js at the repo root** | Tested, see "The UI is the next body of work". |
 | **Draft prep is v1** | The only scope whose data exists today, and the only one with a deadline. |
 | **The board is a distribution plot** | Points-per-game discards the thing this app knows that ADP does not. See the UI decisions table. |
+| **The read path is SQL functions, not PostgREST table queries** | The plot needs every week's points per player. One `draft_board()` call returns 923 rows with their arrays; the table-query equivalent is an N+1 over players or a 15,000-row download the client then has to group. |
+| **The scoring rules are mirrored in TypeScript** | The board shows a score as arithmetic, and the read path runs no Python. Made safe by checking the reconstruction against the stored value and surfacing disagreement. See "The scoring rules are duplicated in TypeScript". |
+| **Plain CSS, no Tailwind** | The design arrived as a hand-written stylesheet with specific tokens; porting it to utility classes would have been a translation step with nothing gained. |
+| **Row expansion fetches on demand** | 923 game logs is a payload almost none of which gets read. |
 | **Commit to `main`, branch only with a reason** | Linear history, solo repo. See "Git and deployment". |
 
 ## Open questions
@@ -423,37 +548,56 @@ runtime via `/game/nfl` rather than hardcoding.
 
 ## Next steps, in the order I would do them
 
-1. **Scaffold the Next.js app** at the repo root with Supabase Auth (Google).
-   First page is the board, not the comparison — the design above is specified
-   and waiting, and the board is what draft prep actually needs. Build it
-   against SQL over `scored_weekly_stats`; no Python at request time.
-2. **Verify the redirect URL configuration** at first sign-in (item 3 under
-   Unverified). This is the first moment it becomes testable — there is no
-   sign-in flow to exercise until the app exists.
-3. **Add a read policy to `pipeline_meta`** so the board can show a "data as of"
-   line.
-4. **Add the other eleven league members** to `league_members` once there is
-   something worth showing them. Remember each needs pre-creating, because
-   `disable_signup` blocks a first OAuth sign-in.
+1. **Sign in.** `npm run dev` (or the preview URL) and click through Google. This
+   is the one unexercised path in the whole system and it gates everything else.
+   If it bounces to a dead localhost address after Google succeeds, the redirect
+   allowlist is the cause — the login page now prints the reason.
+2. **Push, and check production.** The board is committed but **not pushed**, so
+   production is still the pre-UI deployment. `git push` ships it, and
+   `vercel.json` now carries `"framework": "nextjs"`, which production has never
+   built with. Confirm afterwards that `/api/cron/refresh` still answers **401
+   and not a redirect** — that is the regression that matters.
+3. **Add the other eleven league members** to `league_members` once you have seen
+   it work. Each needs pre-creating, because `disable_signup` blocks a first
+   OAuth sign-in.
+4. **Then `/player/[id]` and `/compare`**, if they still seem worth it after
+   using the board. `player_week_log()` already returns what a player page needs.
 5. **In-season: run the Yahoo score diff** to close Q2 and Q3.
 6. **Then team defense** (Q4), once Q3 is settled.
 
-## State as of the end of the 2026-08-16 session
+## State as of the end of the 2026-08-16 UI session
 
-- Production runs `3d7a547`, pushed and deployed. The only commit after it is
-  this handover refresh, which is docs-only and changes no runtime behaviour.
-- The identity fix is **deployed but not yet reflected in the data**. No action
-  needed: `adp_projections` is rebuilt whole on every run regardless of
-  full/incremental mode, so the 11:00 UTC cron republishes it with the fix. If
-  you want it sooner, trigger `/api/cron/refresh` with the secret. To confirm
-  afterwards, check that Justin Jefferson's ADP row carries `00-0036322` (the
-  Vikings receiver) rather than `00-0041075` (the Browns linebacker), and that
-  his 2025 line shows 17 games.
-- Vercel CLI has been upgraded to 59.1.3, which should resolve the empty-secret
-  bug described under "Things that will bite you".
-- Nothing is half-finished. The next session starts on the Next.js scaffold.
+- **Production still runs `3d7a547` — the board is committed but not pushed.**
+  Deliberate, per the "deliberation belongs at push time" rule: pushing changes
+  the framework preset production builds with, and that is worth doing with eyes
+  on it. Local HEAD is `c061c69` plus this handover refresh.
+- **The board is verified against a preview deployment**, not just locally:
+  `fantasy-football-jxxnfli1a-noble21.vercel.app`. The Next app and the Python
+  cron function coexist there, which is the architectural bet this session was
+  most exposed to.
+- **The identity fix is now reflected in the data.** A refresh was run at 15:15
+  UTC (the 12:21 cron predated the fix by three hours). Confirmed: Justin
+  Jefferson's ADP row carries `00-0036322`, 17 games, 11.9 ppg — which is
+  precisely the row the board's design was argued from, so it would have been
+  the wrong thing to develop against.
+- **Migration `0003_board.sql` is applied to the live database.** Applied
+  directly, the same way `0001` and `0002` were.
+- 56 Python tests still pass and `ruff` is clean; the UI touched none of it.
+- Nothing is half-finished. The next session starts by signing in.
 
 ## Things that will bite you
+
+- **A catch-all proxy matcher swallows the cron.** `proxy.ts` must exclude
+  `api/`, because that is the Python function and not a Next route. Get this
+  wrong and the daily refresh receives a 307 to `/login` forever while looking
+  entirely healthy from the outside: no error, no `pipeline_runs` row, just a
+  board whose data stops moving. Any new matcher, rewrite or redirect needs the
+  same exclusion.
+
+- **`vercel.json` pins `"framework": "nextjs"` and must keep doing so.**
+  Auto-detection only runs for a *new* project; this one is remembered as a
+  Python project. Without the pin the Next build succeeds and the deploy then
+  fails looking for a `public` directory.
 
 - **The service-role key bypasses RLS entirely.** It is now the single thing
   between the whole database and the internet. Everything in "Auth and access
