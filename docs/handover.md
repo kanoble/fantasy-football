@@ -49,6 +49,33 @@ this project is not listed:
 vercel integration open supabase --scope noble21
 ```
 
+## Working locally
+
+Two files hold everything needed to talk to the live infrastructure, and both
+are gitignored, so they do not survive a fresh clone:
+
+| File | Rebuild with |
+|---|---|
+| `.vercel/project.json` | `vercel link --scope noble21 --project fantasy-football --yes` |
+| `.env.local` | `vercel env pull` (after linking) |
+
+Three things that will otherwise cost you time:
+
+- **Most `vercel` commands need `--scope noble21`.** The CLI's current scope is
+  the personal account; the project lives in the `noble21` team. Commands
+  without it fail with "Deployment belongs to a different team".
+- **`config.py` calls `load_dotenv()`, which reads `.env` — not `.env.local`.**
+  So a local `ff refresh` does not pick up the pulled credentials on its own:
+
+  ```bash
+  export POSTGRES_URL_NON_POOLING="$(grep '^POSTGRES_URL_NON_POOLING=' .env.local | cut -d= -f2- | tr -d '"')"
+  uv run ff refresh
+  ```
+
+- **`vercel env pull` appends `.env*` to `.gitignore`.** That line overrides the
+  deliberate `!.env.example` negation higher up. Revert it; `.env.local` is
+  already covered by `.env.*`.
+
 ## What works right now
 
 Verified live on 2026-08-16.
