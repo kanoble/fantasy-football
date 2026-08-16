@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { dateline, datelineStamp, type Freshness } from "@/lib/board";
+import { LEAGUE_FOUNDED, dateline, datelineStamp, type Freshness } from "@/lib/board";
 import { Account } from "./account";
 import { Nav, type Section } from "./nav";
 
@@ -67,7 +67,10 @@ export function Lockup({ size }: { size?: number }) {
       <Crest size={size} />
       <span className="wordmark">
         <span className="wm-1">Noble</span>
-        <span className="wm-2">Family Football</span>
+        {/* The founding year rides the descender line rather than taking a
+            third one: a stacked lockup beside a 26px crest has room for two
+            lines, and the bar's height is the one thing every screen shares. */}
+        <span className="wm-2">Family Football · Est. {LEAGUE_FOUNDED}</span>
       </span>
     </Link>
   );
