@@ -91,6 +91,8 @@ htmlcov/
 .supabase/
 node_modules/
 .next/
+# TypeScript incremental build state — machine-local, rewritten every build.
+*.tsbuildinfo
 
 # ---------------------------------------------------------------------------
 # Editors / OS
