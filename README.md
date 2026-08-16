@@ -19,7 +19,7 @@ not redistribute Yahoo data.
 |---|---|
 | **Purpose** | Private analytics for one league I am a member of |
 | **Audience** | The members of that same league — my family, 12 people. Everyone with access is in the league |
-| **Access control** | Hard-coded allowlist of email addresses. No signup, no invite links, no self-service access |
+| **Access control** | Fixed allowlist of email addresses, enforced in the database. Signups are disabled: no signup form, no invite links, no self-service access |
 | **Public access** | **None.** All league data sits behind authentication; unauthenticated visitors see nothing from Yahoo |
 | **Commercial use** | None. No money in the league, no ads, no payments, nothing sold, not a product |
 | **Yahoo access needed** | **Read only** |
@@ -60,10 +60,12 @@ data from our own database. This is a deliberate choice to *minimise* Yahoo
 credentials in circulation and to keep request volume flat, not a workaround: as
 league members, they would each be entitled to read this league themselves.
 
-**Access is a fixed allowlist.** Login is restricted to a hard-coded list of
-email addresses — the league's members. There is no signup form, no invite link,
-and no self-service path to access. Adding a person requires a code change and a
-redeploy by me.
+**Access is a fixed allowlist.** Login is restricted to a fixed list of email
+addresses — the league's members — held in a `league_members` table and enforced
+by database row-level security: a session whose email is not on that list reads
+zero rows from every table. Account signups are disabled at the auth provider, so
+there is no signup form, no invite link, and no self-service path to access.
+Adding a person is a deliberate administrative act by me, on the server side.
 
 **The app never calls Yahoo.** All Yahoo reads happen in a scheduled background
 job, never in response to a page view. A user refreshing a page cannot generate a
@@ -163,9 +165,13 @@ Working today, with no credentials required:
 * the free public data layer (nflverse, Sleeper, RotoWire)
 * `ff compare`, draft-prep player comparison
 
-Pending: the Yahoo integration, which is stubbed behind an API access
-application, and the hosted deployment. The free data layer is deliberately
-designed to work without any Yahoo credentials, so the app is useful either way.
+Live: the hosted backend. The scoring pipeline runs on a daily schedule and
+publishes scored player-weeks to Supabase Postgres, behind the access controls
+described above.
+
+Pending: the web UI, and the Yahoo integration, which is stubbed behind an API
+access application. The free data layer is deliberately designed to work without
+any Yahoo credentials, so the app is useful either way.
 
 ## Getting started
 
