@@ -194,15 +194,77 @@ def build_adp(season: int, positions: tuple[str, ...] = ADP_POSITIONS) -> pl.Dat
     return pl.DataFrame(rows, schema=schema, strict=False)
 
 
+#: Position labels that name the same player pool on different sides of the
+#: join. Sleeper lists fullbacks as FB; nflverse rosters call the same players
+#: RB. Folded together so a real match is never rejected over a label.
+_POSITION_ALIASES = {"FB": "RB", "HB": "RB", "PK": "K"}
+
+
+def _canonical_position(column: str) -> pl.Expr:
+    """``column`` uppercased and folded onto its canonical position label."""
+    return pl.col(column).str.to_uppercase().replace(_POSITION_ALIASES)
+
+
 def attach_player_ids(adp: pl.DataFrame, index: pl.DataFrame) -> pl.DataFrame:
-    """Left-join ADP rows to ``player_id`` on normalised name."""
+    """Resolve each ADP row to a ``player_id``, gating an ambiguous name on position.
+
+    Joining on normalised name alone is wrong here, and wrong in a way that
+    hides. Measured 2026-08-16, ``player_index`` holds 143 normalised names
+    shared by more than one player, so deduplicating the index arbitrarily
+    handed a star his namesake's row: Justin Jefferson, drafted 11th overall,
+    resolved to a Browns *linebacker* of the same name and rendered with no
+    history at all — as did Josh Allen (an offensive lineman) and DeVonta Smith
+    (a defensive back). 159 ADP rows resolved across a position boundary and 19
+    of those inherited a stranger's stat line, which is the worse half: an
+    empty row reads as missing, a wrong row reads as fact.
+
+    Candidates are ranked by position agreement, then by most recent season,
+    then by ``player_id`` — the last purely so a rerun on unchanged input
+    cannot silently produce a different answer, which is what made the original
+    bug so hard to see.
+
+    An unmatched row still keeps a null ``player_id`` rather than being
+    dropped, so a Sleeper name with no nflverse counterpart stays visible.
+    """
     if adp.is_empty() or index.is_empty():
         return adp.with_columns(pl.lit(None, dtype=pl.Utf8).alias("player_id"))
-    return adp.join(
-        index.select("player_id", "norm_name").unique(subset="norm_name"),
+
+    columns = adp.columns
+    candidates = adp.join(
+        index.select(
+            "player_id",
+            "norm_name",
+            pl.col("position").alias("_index_position"),
+            pl.col("latest_season").alias("_index_season"),
+        ),
         on="norm_name",
         how="left",
     )
+
+    exact = pl.col("position").str.to_uppercase() == pl.col("_index_position").str.to_uppercase()
+    equivalent = _canonical_position("position") == _canonical_position("_index_position")
+    unknown = pl.col("position").is_null() | pl.col("_index_position").is_null()
+
+    ranked = candidates.with_columns(
+        pl.when(exact)
+        .then(0)
+        .when(equivalent)
+        .then(1)
+        # A candidate whose position nobody knows beats one that actively
+        # contradicts: missing information is not evidence of a mismatch.
+        .when(unknown)
+        .then(2)
+        .otherwise(3)
+        .alias("_match_rank")
+    )
+
+    best = ranked.sort(
+        ["_match_rank", "_index_season", "player_id"],
+        descending=[False, True, False],
+        nulls_last=True,
+    ).unique(subset=["season", "norm_name"], keep="first", maintain_order=True)
+
+    return best.select(*columns, "player_id")
 
 
 def build_injury_news() -> pl.DataFrame:
