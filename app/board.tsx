@@ -607,7 +607,10 @@ function Row({
           onClick={onToggle}
         >
           <span className="stripe" aria-hidden="true" />
-          <span className="rank">{ordinal}</span>
+          {/* `.ord`, not `.rank`: this is the row's place in the draft order,
+              and the career table's `.rank` is a positional finish. One class
+              name for both let the later rule win — see globals.css. */}
+          <span className="ord">{ordinal}</span>
           <span className="who">
             <span className="n">
               {row.name}
