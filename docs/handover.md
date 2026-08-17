@@ -1071,6 +1071,42 @@ It also caught "Marvin Jones" rendering as "Marvi" — labels are clipped by the
 plot's `overflow: hidden`, so they flip to the left of their dot past 78% of the
 axis.
 
+#### The axis was backwards on first read, and two other things with it
+
+Kevin's first look at the built screen found three things, and the first was a
+real defect in reasoning rather than in code.
+
+1. **Cost and pick number run in opposite directions, and the axis was drawn the
+   wrong way.** Pick 1 is the *most expensive* player in the draft. Plotting the
+   pick number ascending to the right therefore puts the cheapest players on the
+   right — a falling cost axis under a caption promising "cost rises to the
+   right" and "bargains are top-left", while the labelled bargains sat top-right.
+   The axis is now reversed: pick 768 at the left edge, pick 1 at the right, and
+   the shaded undrafted region moved to the left with it.
+
+   **`logCost()` and `costX()` are now separate functions**, and that split is
+   the durable part. The neighborhood is a two-pointer walk that needs an
+   ascending array, so reversing the display coordinate silently reversed the
+   sort the residual math depends on. `logCost` ascends with the pick number and
+   is what `buildModel` uses; `costX` is the screen percentage and nothing in the
+   math may read it.
+
+2. **Neither axis was labelled.** The plot carried bare numbers and a caption
+   three lines below. There is now a rotated y-axis title naming the vertical and
+   its unit, and an x-axis row reading *cheaper — later picks* / **draft cost ·
+   overall pick** / *costlier — earlier picks*. On a reversed scale the direction
+   has to be stated outright.
+
+3. **The hollow dots were an encoding that ate a working one.** A hollow dot
+   means one season of evidence — but under the `2025 only` window *every* figure
+   rests on one season by construction, so the whole chart went hollow and the
+   hollow style dropped the fill, taking the good/bad sign colour with it. That
+   view had no colour at all. Two fixes: `ValueModel.evidenceVaries` says whether
+   the season count differs between players at all, and the marker is suppressed
+   when it does not; and a hollow dot now carries its sign in its border rather
+   than going neutral grey. **There is also a key now**, which is what the
+   question was really asking for.
+
 #### The cost axis does not rescale, and the empty region says so
 
 The axis is fixed at picks 1–768 on a log scale whatever the scope is. Shrinking
@@ -1080,7 +1116,9 @@ the one thing this screen must never do — so the region past the cutoff is
 gap in the data; it is the end of the draft.
 
 Ticks sit on round boundaries, doubling — 12, 24, 48, 96, 192, 384 — because a
-drafter thinks in rounds and doubling is what spaces evenly on a log axis.
+drafter thinks in rounds and doubling is what spaces evenly on a log axis. Pick 1
+gets a tick of its own despite not being a round boundary: it is the right edge
+and the anchor that makes the direction readable at a glance.
 
 #### Colour, and the constraint on it
 

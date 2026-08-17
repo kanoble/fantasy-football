@@ -80,7 +80,19 @@ export const MIN_COHORT = 8;
  * generous against the deepest 2026 price (700) and is 12 × 64, so every tick
  * below is a real round boundary in a 12-team league.
  *
- * Cost rises to the right, so bargains are top-left.
+ * ---------------------------------------------------------------------------
+ * **COST RISES TO THE RIGHT, WHICH MEANS THE PICK NUMBER FALLS TO THE RIGHT.**
+ *
+ * The first build got this backwards and shipped a legend that contradicted its
+ * own plot. Cost and pick number run in opposite directions: pick 1 is the most
+ * expensive player in the draft and pick 192 is the cheapest. Plotting the pick
+ * number ascending rightward therefore puts the *cheapest* players on the right,
+ * which is a falling cost axis — and it put the bargains top-right under a
+ * caption promising them top-left.
+ *
+ * So the axis is reversed: pick 768 at the left edge, pick 1 at the right.
+ * Cheap is left, expensive is right, a bargain is cheap and over the line, and
+ * bargains are genuinely top-left.
  */
 export const COST_MIN = 1;
 export const COST_MAX = 768;
@@ -262,12 +274,45 @@ export type ValueModel = {
    * would make the same residual look larger as a bargain than as a bust.
    */
   range: number;
+  /**
+   * Whether `seasons` differs between players at all in this view.
+   *
+   * It does not always. Under the `last` window every figure rests on exactly
+   * one season **by construction**, so drawing thin evidence differently there
+   * marks the entire chart and distinguishes nobody. The first build did exactly
+   * that: every dot on the 2025-only view went hollow, and because the hollow
+   * style dropped the fill it also threw away the good/bad sign colour — a
+   * meaningless encoding displacing a working one.
+   *
+   * So the chart asks the model rather than assuming, and the answer is derived
+   * from the dots rather than from a table of which combinations vary.
+   */
+  evidenceVaries: boolean;
 };
 
-/** Where a pick number sits on the log cost axis, as a percentage from the left. */
+/**
+ * Price in log space, ascending with the pick number.
+ *
+ * The neighborhood math runs on this and never on `costX`, deliberately. Which
+ * way the axis is drawn is a presentation decision; which players are nearest in
+ * price is not, and the two were tangled in the first build — reversing the axis
+ * silently reversed the sort the two-pointer window depends on. Keeping them
+ * apart means the display direction can be argued about without anything in
+ * `buildModel` having an opinion.
+ */
+export function logCost(adp: number): number {
+  return Math.log(Math.min(Math.max(adp, COST_MIN), COST_MAX));
+}
+
+/**
+ * Where a pick number sits on screen, as a percentage from the left.
+ *
+ * **Reversed**: the cheapest picks are at the left and the first pick is at the
+ * right, so that *cost* rises to the right. See the note on `COST_MAX`.
+ */
 export function costX(adp: number): number {
-  const clamped = Math.min(Math.max(adp, COST_MIN), COST_MAX);
-  return (Math.log(clamped / COST_MIN) / Math.log(COST_MAX / COST_MIN)) * 100;
+  const span = Math.log(COST_MAX / COST_MIN);
+  return 100 - ((logCost(adp) - Math.log(COST_MIN)) / span) * 100;
 }
 
 /**
@@ -435,8 +480,12 @@ export function buildModel(
     // measured in — nearest by *price ratio*, not by pick-number difference.
     // Picks 3 and 15 are twelve apart and nothing alike; picks 203 and 215 are
     // twelve apart and interchangeable.
+    //
+    // `logCost` and not `costX`: the window is a two-pointer walk and needs an
+    // ascending array, so running it on the screen coordinate would break the
+    // moment somebody reversed the axis — which is exactly what happened.
     const sorted = [...group].sort((a, b) => a.player.adp - b.player.adp);
-    const xs = sorted.map((entry) => costX(entry.player.adp));
+    const xs = sorted.map((entry) => logCost(entry.player.adp));
 
     for (let index = 0; index < sorted.length; index += 1) {
       const [lo, hi] = neighborhood(xs, index, neighbors);
@@ -450,7 +499,7 @@ export function buildModel(
 
       dots.push({
         player: entry.player,
-        x: xs[index]!,
+        x: costX(entry.player.adp),
         // From the top, so a positive residual sits above the zero line.
         y: Math.max(0, Math.min(100, 50 - (residual / range) * 50)),
         value: entry.value,
@@ -462,7 +511,12 @@ export function buildModel(
     }
   }
 
-  return { dots, unplotted, range };
+  return {
+    dots,
+    unplotted,
+    range,
+    evidenceVaries: dots.some((dot) => dot.seasons !== dots[0]!.seasons),
+  };
 }
 
 /**
@@ -510,7 +564,10 @@ export function scopeModel(
   return {
     dots: model.dots.filter((dot) => keep(dot.player)),
     unplotted: model.unplotted.filter((entry) => keep(entry.player)),
+    // Both carried through untouched. They are properties of the field the
+    // model was built against, not of whoever is left on screen.
     range: model.range,
+    evidenceVaries: model.evidenceVaries,
   };
 }
 

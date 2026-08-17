@@ -322,11 +322,17 @@ export function Chart({
       <div className="mkt-body">
         <div className="mkt-main">
           <div className="mkt-frame">
+            {/* Both axes were unlabelled in the first build: the plot carried
+                bare numbers and a caption underneath, and nothing on the frame
+                said what either scale measured. */}
             <div className="mkt-yaxis" aria-hidden="true">
               <span className="mkt-ytick mkt-ytop">+{scoped.range}</span>
               <span className="mkt-ytick mkt-ymid">0</span>
               <span className="mkt-ytick mkt-ybot">&minus;{scoped.range}</span>
             </div>
+            <span className="mkt-ylab" aria-hidden="true">
+              {meta.label} vs the field ({meta.unit})
+            </span>
 
             <div
               className="mkt-plot"
@@ -343,13 +349,14 @@ export function Chart({
                   rescaling it when the cutoff moves would move every dot, which
                   is the one thing this screen must never do. So the region past
                   the cutoff is shaded and named instead of left as dead space:
-                  it is not a gap in the data, it is the end of the draft. */}
+                  it is not a gap in the data, it is the end of the draft.
+
+                  On the left, because the axis runs cheapest-first: everything
+                  cheaper than the last pick of the draft is undrafted. */}
               {maxCost != null ? (
                 <>
-                  <span className="mkt-beyond" style={{ left: at(costX(maxCost)) }} />
-                  <span className="mkt-beyond-lab" style={{ left: at(costX(maxCost)) }}>
-                    undrafted
-                  </span>
+                  <span className="mkt-beyond" style={{ width: at(costX(maxCost)) }} />
+                  <span className="mkt-beyond-lab">undrafted</span>
                 </>
               ) : null}
 
@@ -363,9 +370,16 @@ export function Chart({
               {scoped.dots.map((dot, index) => (
                 <span
                   key={dot.player.player_id ?? dot.player.name}
+                  // `thin` only when the season count actually differs between
+                  // players. Under "2025 only" every figure rests on exactly one
+                  // season, so marking thin evidence there marked the whole
+                  // chart and distinguished nobody — while the hollow style
+                  // dropped the fill and took the good/bad sign colour with it.
                   className={`mkt-dot${dot.residual >= 0 ? " up" : " down"}${
                     near === index ? " on" : ""
-                  }${dot.seasons < 2 ? " thin" : ""}${dot.clamped ? " off" : ""}`}
+                  }${model.evidenceVaries && dot.seasons < 2 ? " thin" : ""}${
+                    dot.clamped ? " off" : ""
+                  }`}
                   style={{ left: at(dot.x), top: at(dot.y) }}
                 />
               ))}
@@ -398,18 +412,53 @@ export function Chart({
                   {tick}
                 </span>
               ))}
+              {/* Pick 1 is the right edge of the axis and is never a round
+                  boundary, so it is not in COST_TICKS — but it is the anchor
+                  that makes the direction readable at a glance. */}
+              <span className="mkt-xtick mkt-xtick-end" style={{ left: at(costX(1)) }}>
+                1
+              </span>
+              <span className="mkt-xlab">
+                <span className="mkt-xlab-l">cheaper &mdash; later picks</span>
+                <span className="mkt-xlab-c">Draft cost &middot; overall pick</span>
+                <span className="mkt-xlab-r">costlier &mdash; earlier picks</span>
+              </span>
             </div>
           </div>
 
           <p className="mkt-legend">
-            Cost rises to the right, in overall pick number, on a log scale — so the
-            first two rounds get real width instead of a sliver. Height is{" "}
+            Cost rises to the right, so the first pick is at the right edge and the
+            last is at the left — on a log scale, so the early rounds get real
+            width instead of a sliver. Height is{" "}
             <Tip hint={meta.hint}>{meta.label.toLowerCase()}</Tip> measured against
             what that price usually buys{" "}
             <Tip hint="The middle value among the 13 players nearest him in price at his own position. Per position always: a quarterback outscores a receiver every week of his life, so one curve across the whole market would report what position a man plays rather than whether he is a bargain.">
               at his own position
             </Tip>
-            . Bargains are top-left.
+            . <strong>Cheap and over the line is a bargain, so bargains are
+            top-left.</strong>
+          </p>
+
+          {/* The key. Kevin's question on first reading was why some circles are
+              filled and some are not, which is the answer to "was there a key?" */}
+          <p className="mkt-key">
+            <span className="mkt-key-item">
+              <span className="mkt-dot up mkt-key-dot" /> beat what his price buys
+            </span>
+            <span className="mkt-key-item">
+              <span className="mkt-dot down mkt-key-dot" /> fell short of it
+            </span>
+            {model.evidenceVaries ? (
+              <span className="mkt-key-item">
+                <span className="mkt-dot up thin mkt-key-dot" />{" "}
+                <Tip hint="A hollow dot rests on a single season. One season is a fact about one year wearing the clothes of a career, and it is worth less than the same number drawn from three — so the chart says which is which rather than presenting them as equals.">
+                  one season only
+                </Tip>
+              </span>
+            ) : null}
+            <span className="mkt-key-item">
+              <span className="mkt-dot down off mkt-key-dot" /> past the end of the axis
+            </span>
           </p>
         </div>
 

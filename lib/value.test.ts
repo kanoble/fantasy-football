@@ -9,6 +9,7 @@ import {
   buildModel,
   costX,
   figureFor,
+  logCost,
   neighborhood,
   scopeModel,
   type FormSeason,
@@ -80,22 +81,45 @@ const near = (actual: number, expected: number, what: string) =>
   );
 
 describe("costX", () => {
-  it("pins the ends of the axis and rises to the right", () => {
-    near(costX(COST_MIN), 0, "the first pick sits at the left edge");
-    near(costX(COST_MAX), 100, "the last pick sits at the right edge");
-    assert.ok(costX(12) < costX(24) && costX(24) < costX(192), "cost rises to the right");
+  // The first build had this backwards and shipped a caption that contradicted
+  // its own plot: pick number was drawn ascending to the right, which puts the
+  // CHEAPEST players on the right, which is a falling cost axis. Cost and pick
+  // number run in opposite directions and these assertions are the guard.
+  it("puts the most expensive pick on the right, because cost rises to the right", () => {
+    near(costX(COST_MIN), 100, "pick 1 is the costliest player and sits at the right edge");
+    near(costX(COST_MAX), 0, "the deepest price sits at the left edge");
+  });
+
+  it("falls in pick number from left to right", () => {
+    assert.ok(
+      costX(192) < costX(96) && costX(96) < costX(24) && costX(24) < costX(1),
+      "a later pick is always further left than an earlier one",
+    );
   });
 
   it("is logarithmic, so equal ratios take equal width", () => {
     // The whole reason the axis is not linear: picks 1-24 would otherwise take
     // 8% of the width, and the top 24 is most of what the screen is for.
-    near(costX(4) - costX(2), costX(8) - costX(4), "a doubling is a fixed width");
-    assert.ok(costX(24) > 40, "the first two rounds take real width, not a sliver");
+    near(costX(2) - costX(4), costX(4) - costX(8), "a doubling is a fixed width");
+    assert.ok(100 - costX(24) > 40, "the first two rounds take real width, not a sliver");
   });
 
   it("clamps rather than escaping the frame", () => {
-    near(costX(0.5), 0, "a price below the axis");
-    near(costX(5000), 100, "a price beyond the axis");
+    near(costX(0.5), 100, "a price above the axis");
+    near(costX(5000), 0, "a price below it");
+  });
+});
+
+describe("logCost", () => {
+  // The neighborhood is a two-pointer walk over an ascending array. Running it
+  // on the screen coordinate is what broke when the axis was reversed, so the
+  // two are separate functions and this pins the one the math depends on.
+  it("ascends with the pick number, whichever way the axis is drawn", () => {
+    assert.ok(logCost(1) < logCost(12) && logCost(12) < logCost(192));
+  });
+
+  it("moves opposite to the screen coordinate", () => {
+    assert.ok(logCost(12) < logCost(96) && costX(12) > costX(96));
   });
 });
 
@@ -274,6 +298,50 @@ describe("buildModel — a known curve reproduces known expectations", () => {
     near(at(10).y, 50, "the market's expectation is the middle of the plot");
     assert.ok(at(0).y < 50, "beating your price puts you above the line");
     assert.ok(at(19).y > 50, "and missing it puts you below");
+  });
+});
+
+describe("buildModel — evidence is only marked when it actually differs", () => {
+  it("says nothing varies when every figure rests on one season", () => {
+    // Under the `last` window this is true BY CONSTRUCTION, and the first build
+    // marked every dot on that view as thin evidence — which distinguished
+    // nobody and, because the hollow style dropped the fill, threw away the
+    // good/bad sign colour along with it.
+    const model = buildModel(fallingCurve(), {
+      vertical: "median",
+      lookback: "last",
+      statSeason: STAT_SEASON,
+      neighbors: 5,
+    });
+
+    assert.ok(model.dots.every((dot) => dot.seasons === 1));
+    assert.equal(model.evidenceVaries, false, "so the chart must not mark any of them");
+  });
+
+  it("says it varies when the window mixes one-season and three-season players", () => {
+    const seasons = (n: number) =>
+      [2025, 2024, 2023]
+        .slice(0, n)
+        .map((season) => ({ season, games: 17, median: 12, total: 200 }));
+
+    const model = buildModel(
+      Array.from({ length: 12 }, (_, index) =>
+        player({ name: `RB ${index}`, adp: cost(index), form: seasons(index < 6 ? 1 : 3) }),
+      ),
+      { vertical: "median", lookback: "weighted", statSeason: STAT_SEASON, neighbors: 5 },
+    );
+
+    assert.equal(model.evidenceVaries, true);
+  });
+
+  it("carries the answer through a scope unchanged", () => {
+    const model = buildModel(fallingCurve(), {
+      vertical: "median",
+      lookback: "last",
+      statSeason: STAT_SEASON,
+      neighbors: 5,
+    });
+    assert.equal(scopeModel(model, { maxCost: cost(5) }).evidenceVaries, model.evidenceVaries);
   });
 });
 

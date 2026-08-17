@@ -2870,14 +2870,31 @@ table.log td.z {
    the left do not push the axis out of line with what it labels. */
 .mkt-frame {
   display: grid;
-  grid-template-columns: 2.6rem 1fr;
-  grid-template-rows: 30rem 1.5rem;
+  grid-template-columns: 1.1rem 2.6rem 1fr;
+  grid-template-rows: 30rem 2.9rem;
 }
 
 .mkt-yaxis {
   position: relative;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+/* The vertical's name, on the axis it names. Rotated rather than set above the
+   plot because it belongs to the scale, and it changes with the vertical — a
+   caption three lines below cannot do that job at a glance. */
+.mkt-ylab {
   grid-column: 1;
   grid-row: 1;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  place-self: center;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
 }
 
 .mkt-ytick {
@@ -2898,7 +2915,7 @@ table.log td.z {
    rather than on it. All `inset`, so nothing costs a paint across 300 dots. */
 .mkt-plot {
   position: relative;
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   background: var(--panel);
   border: 1px solid var(--firm);
@@ -2926,8 +2943,8 @@ table.log td.z {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: 0;
-  border-left: 1px dashed var(--firm);
+  left: 0;
+  border-right: 1px dashed var(--firm);
   background: var(--panel-hi);
   opacity: 0.55;
 }
@@ -2935,7 +2952,7 @@ table.log td.z {
 .mkt-beyond-lab {
   position: absolute;
   top: 0.4rem;
-  transform: translateX(0.5rem);
+  left: 0.6rem;
   font-family: var(--mono);
   font-size: 0.55rem;
   letter-spacing: 0.1em;
@@ -2996,8 +3013,11 @@ table.log td.z {
    board already draws between a ceiling week and a floor week. */
 .mkt-dot.thin {
   background: transparent;
-  border: 1.5px solid var(--muted);
+  border: 1.5px solid currentcolor;
 }
+
+.mkt-dot.up.thin { color: var(--good); }
+.mkt-dot.down.thin { color: var(--bad); }
 
 .mkt-dot.on {
   outline: 2px solid var(--amber);
@@ -3079,8 +3099,34 @@ table.log td.z {
 
 .mkt-xaxis {
   position: relative;
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 2;
+}
+
+/* Which way the axis runs, said on the axis. The direction is the one thing a
+   reversed scale has to state outright: pick 1 is the most expensive player in
+   the draft, so cost rising to the right means the pick number falls. */
+.mkt-xlab {
+  position: absolute;
+  top: 1.35rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.mkt-xlab-c {
+  color: var(--ink);
+}
+
+.mkt-xtick-end {
+  color: var(--ink);
 }
 
 .mkt-xtick {
@@ -3091,6 +3137,31 @@ table.log td.z {
   font-size: 0.6rem;
   font-variant-numeric: tabular-nums;
   color: var(--dim);
+}
+
+/* The key. Its absence was the first question a reader asked of this screen:
+   why are some circles filled and some not? */
+.mkt-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.4rem;
+  margin: 0.55rem 0 0;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.mkt-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The dots in the key are the same class as the dots on the plot, so the key
+   cannot drift from what it describes. Only the positioning is undone. */
+.mkt-key-dot {
+  position: static;
+  margin: 0;
+  flex: none;
 }
 
 .mkt-legend {
