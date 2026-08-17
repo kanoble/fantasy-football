@@ -8,7 +8,9 @@ import { createClient } from "@/lib/supabase/server";
 import { teamClass } from "@/lib/teams";
 import { AppBar, PageHead } from "../../chrome";
 import { NotOnList } from "../../not-on-list";
+import { Bio } from "./bio";
 import { Career } from "./career";
+import { Portrait } from "./portrait";
 
 const f1 = (value: number | null | undefined) =>
   value == null || Number.isNaN(value) ? "—" : value.toFixed(1);
@@ -63,15 +65,8 @@ export default async function PlayerPage({
       <PageHead
         title={card.name}
         tone={tone}
-        context={
-          <>
-            {card.position ?? "—"} · {card.team ?? "free agent"} ·{" "}
-            {card.career_games} career games
-            {card.injury_status ? (
-              <span className="flagpill q inline">{card.injury_status}</span>
-            ) : null}
-          </>
-        }
+        portrait={<Portrait src={card.headshot_url} name={card.name} />}
+        context={<Bio card={card} />}
         action={
           <Link className="linkish" href={`/compare?ids=${card.player_id}`}>
             Compare

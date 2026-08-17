@@ -416,6 +416,82 @@ code {
   color: var(--muted);
 }
 
+/* The two bio lines on a player page.
+   `.ctx` is a <p>, so these are spans made block rather than divs — a div
+   inside a paragraph is invalid and React will not warn about it. */
+.bio-now,
+.bio-then {
+  display: block;
+}
+
+/* Where he came from, set one step back from what he is now: fixed for life
+   and read once, against a line that changes every season. */
+.bio-then {
+  margin-top: 0.2rem;
+  /* --faint rather than an opacity on --muted: the palette already encodes
+     this step and it is tuned separately for the two grounds, which an opacity
+     multiplier cannot be. */
+  color: var(--faint);
+  text-transform: none;
+  letter-spacing: 0.06em;
+}
+
+/* ---------------------------------------------------------------------------
+   The portrait.
+
+   96px, one size everywhere, which is what keeps a player to a single Vercel
+   image cache key — see next.config.ts. Square rather than round: these are
+   NFL studio portraits shot with headroom, and a circular mask crops the top
+   of the helmet off about a third of them.
+   --------------------------------------------------------------------------- */
+.portrait {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-hi);
+  /* The team hue again, as a hairline rather than a fill: the page-bar beside
+     it is already carrying the colour, and two solid blocks of it would fight. */
+  box-shadow: inset 0 0 0 1px var(--firm);
+  position: relative;
+}
+
+.portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Portraits are shot head-and-shoulders on a transparent ground; anchoring
+     to the top keeps the face centred when the crop bites. */
+  object-position: 50% 12%;
+  display: block;
+}
+
+/* The 12% with no published portrait. Initials on the team hue, occupying
+   exactly the space the image would, so nothing shifts between the two. */
+.portrait.none {
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--tm, var(--tm-none));
+  background: var(--panel-hi);
+}
+
+@media (max-width: 34rem) {
+  /* On a phone the name needs the width more than the face does. */
+  .portrait {
+    width: 64px;
+    height: 64px;
+  }
+
+  .portrait.none {
+    font-size: 1.3rem;
+  }
+}
+
 .page-aside {
   display: flex;
   align-items: center;

@@ -115,6 +115,7 @@ export function PageHead({
   freshness,
   tone,
   action,
+  portrait,
 }: {
   title: React.ReactNode;
   context?: React.ReactNode;
@@ -126,11 +127,20 @@ export function PageHead({
   /** A team class from `lib/teams.ts`, when the page is about one player. */
   tone?: string;
   action?: React.ReactNode;
+  /**
+   * A face, on the one screen that is about a person.
+   *
+   * A slot rather than a `headshotUrl` prop: the board and the compare page
+   * pass nothing, and keeping the image out of this file means the chrome does
+   * not grow a dependency on `next/image` or on what a player is.
+   */
+  portrait?: React.ReactNode;
 }) {
   return (
     <div className={`page-head${tone ? ` ${tone}` : ""}`}>
       <div className="page-id">
         {tone ? <span className="page-bar" /> : null}
+        {portrait}
         <div>
           <h1>{title}</h1>
           {context ? <p className="ctx">{context}</p> : null}
