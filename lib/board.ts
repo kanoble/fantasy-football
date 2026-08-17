@@ -14,6 +14,23 @@ export const LEAGUE_NAME = "Noble Family Football";
 export const LEAGUE_FOUNDED = 2021;
 
 /**
+ * How many teams draft, which is what makes a pick number mean anything.
+ *
+ * Already assumed in three places before it was ever written down: `DRAFT_PICKS`
+ * in `lib/value.ts` is 192 because that is 12 × 16, `COST_MAX` is 768 because
+ * that is 12 × 64, and `position_context()`'s `p_teams` defaults to 12. Named
+ * here because `/market`'s seat control turns it into arithmetic a reader can
+ * check — the snake only folds back at the right place if this is the real
+ * number.
+ *
+ * It is a constant and not a setting for the same reason `ADP_SEASON` is: this
+ * is one private league whose size has not changed since 2021, and a control for
+ * it would be a control nobody would ever touch. The Yahoo integration would
+ * make it a fact rather than an assumption, and it is still stubbed.
+ */
+export const LEAGUE_TEAMS = 12;
+
+/**
  * Draft day, as an ISO date with no time.
  *
  * No time because nobody has fixed one, and an invented hour would render as

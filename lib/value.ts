@@ -3,7 +3,7 @@
 // bare `./board` is the one thing standing between the residual math and having
 // any tests at all. `allowImportingTsExtensions` in tsconfig.json is what keeps
 // `tsc --noEmit` happy with it; Turbopack resolves it unchanged.
-import { median } from "./board.ts";
+import { LEAGUE_TEAMS, median } from "./board.ts";
 
 /**
  * The residual math behind `/market`.
@@ -188,6 +188,23 @@ export type MarketValue = {
   priced_seasons: number;
 };
 
+/**
+ * One row of `adp_spread()` — how firm this year's price is.
+ *
+ * `adp` is **this source's own price**, which is not the price on the cost axis.
+ * Both travel because the gap between them is evidence rather than noise; see
+ * `survivalOf` for what is done with it and migration `0011` for the numbers
+ * that forced it.
+ */
+export type AdpSpread = {
+  /** FFC's own pick number for the same player. */
+  adp: number;
+  /** Standard deviation of the pick he actually went at. */
+  stdev: number;
+  /** How many drafts stand behind it, where the source says. */
+  drafts: number | null;
+};
+
 /** One row of `season_form()`. Only seasons actually played appear. */
 export type FormSeason = {
   player_id?: string;
@@ -220,6 +237,14 @@ export type ValuePlayer = {
   priced_seasons: number;
   /** Newest first. */
   form: FormSeason[];
+  /**
+   * How firm his price is, or `null` where no source publishes a spread for him.
+   *
+   * A nested object rather than three nullable fields beside each other, so that
+   * "we have dispersion evidence" is one check and a half-populated spread
+   * cannot be represented at all. `survivalOf` branches on exactly this.
+   */
+  spread: AdpSpread | null;
 };
 
 /** A player who made it onto the plot. */
@@ -617,3 +642,338 @@ export const REASONS: Record<Reason, { label: string; hint: string }> = {
     hint: `Fewer than ${MIN_COHORT} players at his position carry both a price and a season, so any baseline drawn for them would be fit to almost nothing and every residual would come out near zero by construction.`,
   },
 };
+
+/* ===========================================================================
+ * AVAILABILITY — who is still going to be there.
+ *
+ * Everything above answers "who is the best value in this draft". A drafter is
+ * only ever asking "who is the best value **I can still get**", and those are
+ * different questions: with the axis corrected, the rail's top two came back
+ * McCaffrey (ADP 5.2) and Puka Nacua (4.6), which is arithmetically right and
+ * useless at pick 40 because they went twenty-five picks ago.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TWO RULES HERE, and they are the same two rules as above wearing
+ * different clothes:
+ *
+ * 1. **None of this may reach `buildModel`.** Narrowing the players by who is
+ *    likely available would refit every baseline, which is the exact failure the
+ *    scope-invariance test exists to catch. Availability re-ranks a list; it is
+ *    not an input to the model.
+ *
+ * 2. **None of this may move a dot.** `rankRail` returns a reordered, filtered
+ *    view of dots it did not create and does not touch. The scatter is the field
+ *    as it stands; the rail is the recommendation. Changing the round must change
+ *    only the second, or the reader loses the one thing this screen guarantees.
+ *
+ * Deliberately, availability is also kept out of `scopeModel` — which *would* be
+ * allowed to drop dots, since dropping is not moving. It is kept out anyway,
+ * because a scatter that reshuffled every time the round selector moved would
+ * make exploring rounds feel like the data was changing underneath. The round
+ * control touches the rail and nothing else.
+ * =========================================================================== */
+
+/**
+ * Below this chance of lasting, `value` mode stops listing a player at all.
+ *
+ * The division of labour between the two modes, and the reason this number can
+ * be low: **the floor removes the arithmetically impossible, not the merely
+ * unlikely.** Discounting the unlikely is what `draft` mode does, continuously
+ * and without a threshold. So this only has to catch the players a rail headed
+ * "best available" would be lying about — the ones who cannot be had at all —
+ * and 10% is comfortably past that line while leaving genuine long shots in a
+ * list that is explicitly not weighted by availability.
+ *
+ * The count of who this removed travels with the result rather than being
+ * swallowed, because a list that silently shortens is indistinguishable from a
+ * shorter board.
+ */
+export const SURVIVAL_FLOOR = 0.1;
+
+/** How the rail is ordered. Kevin's call: both, as a toggle. */
+export type RailMode = "value" | "draft";
+
+/**
+ * Where the reader's next pick is, as far as anything can know.
+ *
+ * Two shapes because the seat arrives at the last possible moment. **A seat is
+ * set moments before the draft starts**, so "no seat" is not an edge case — it is
+ * the state this screen is in for every prep session anybody will ever run, and
+ * the round has to be enough on its own.
+ *
+ * - `round` is a 12-wide window of pick numbers, which is all a round tells you
+ *   without a seat.
+ * - `pick` is the exact number, available once the seat is known and the room has
+ *   started picking.
+ */
+export type PickTarget =
+  | { kind: "round"; from: number; to: number }
+  | { kind: "pick"; pick: number };
+
+/** What a survival number is actually resting on. */
+export type SurvivalBasis =
+  /** A normal built from a published spread. */
+  | "modeled"
+  /** No spread for him, so his price alone, as a step. */
+  | "step"
+  /** No target chosen, so availability is not in play. */
+  | "none";
+
+/**
+ * The picks belonging to one seat in a snake draft, in order.
+ *
+ * Odd rounds run 1→T and even rounds run T→1, which is the whole of a snake.
+ * Worth having as its own function because the consequence is not obvious and it
+ * is the reason a seat matters at all: **the gap between your picks is wildly
+ * seat-dependent.** At seat 6 you wait about twelve picks every time. At seat 1
+ * or seat 12 you wait twenty-two picks and then pick twice back to back. "Who
+ * will still be there" is a different question at the turn than in the middle,
+ * and a round window cannot tell the two apart.
+ */
+export function seatPicks(
+  seat: number,
+  { teams = LEAGUE_TEAMS, rounds = DRAFT_PICKS / LEAGUE_TEAMS }: { teams?: number; rounds?: number } = {},
+): number[] {
+  const picks: number[] = [];
+  for (let round = 1; round <= rounds; round += 1) {
+    const inRound = round % 2 === 1 ? seat : teams - seat + 1;
+    picks.push((round - 1) * teams + inRound);
+  }
+  return picks;
+}
+
+/**
+ * The reader's next pick, given a seat and how many picks have gone.
+ *
+ * `picksGone` comes from `drafted.size`, which this screen already polls every
+ * 15 seconds — so once the seat is known, "when am I up" needs nothing from
+ * anybody. Returns `null` past the end of the draft rather than a pick that does
+ * not exist.
+ */
+export function nextPick(
+  seat: number,
+  picksGone: number,
+  options: { teams?: number; rounds?: number } = {},
+): number | null {
+  return seatPicks(seat, options).find((pick) => pick > picksGone) ?? null;
+}
+
+/**
+ * The pick numbers a round covers, which is all a round says without a seat.
+ *
+ * Independent of the snake's direction: round `r` is always picks
+ * `(r-1)T+1 … rT`, and only *which* of them is yours depends on your seat and
+ * the parity. That is exactly why this is honest when the seat is unknown — the
+ * window is a fact, and the position inside it is the missing part.
+ */
+export function roundWindow(round: number, teams: number = LEAGUE_TEAMS): PickTarget {
+  return { kind: "round", from: (round - 1) * teams + 1, to: round * teams };
+}
+
+/**
+ * The standard normal CDF.
+ *
+ * Zelen & Severo (A&S 26.2.17), whose absolute error is below 7.5e-8 — several
+ * orders of magnitude tighter than anything here needs, since the output is a
+ * probability shown to the reader as a whole percent. Written out rather than
+ * pulled in as a dependency: it is nine lines, the project has no runtime deps
+ * for math, and `lib/value.test.ts` pins it against known values.
+ */
+export function normalCdf(z: number): number {
+  if (z < 0) return 1 - normalCdf(-z);
+  const t = 1 / (1 + 0.2316419 * z);
+  const poly =
+    t *
+    (0.319381530 +
+      t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const density = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+  return 1 - density * poly;
+}
+
+/**
+ * The chance a player is still on the board at a given pick.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE SPREAD IS WIDENED BEFORE IT IS USED, which is the one piece of
+ * arithmetic here that is a judgment rather than a fact.
+ *
+ * Two aggregators price this draft and they do not agree. The cost axis plots
+ * Sleeper's number, because that is the price every other screen in this app
+ * shows; the only published *dispersion* is FFC's. Using one source's centre
+ * with the other's spread is the obvious move and it is measurably wrong —
+ * across the 178 matched rows inside the draft, the two prices differ by a median
+ * of 1.20 of FFC's own standard deviations, the p90 is 2.74, and **42 of 178
+ * players (24%) sit more than two sigma apart.** Saquon Barkley is 13.9 to
+ * Sleeper and 20.1 to FFC on a stdev of 3.5: believing those three numbers
+ * together says he cannot possibly last, while the drafts FFC actually watched
+ * had him going six picks later with a low of 33.
+ *
+ * The correlation between that gap and the stdev is 0.427, which is what says
+ * the disagreement is a *separate* uncertainty and not one the stdev already
+ * contains. So the two are added in quadrature — the standard way to combine
+ * independent uncertainties — and the result is centred on the board's own
+ * price. It behaves correctly at both ends: near the top of the draft the two
+ * sources agree closely and the widening is negligible, while in the middle
+ * rounds where they disagree by twenty picks it widens enough to stop the model
+ * claiming a precision nobody has.
+ *
+ * Checked against the alternative: for Barkley this returns 6% survival to pick
+ * 25 where FFC's own centre and spread, used natively, give 8%. The widening
+ * lands close to the answer the other source would have given on its own terms,
+ * which is the property that makes it more than a fudge.
+ *
+ * ---------------------------------------------------------------------------
+ * TWO LIMITS, both stated because they are invisible in the output.
+ *
+ * **A normal is symmetric and draft position is not.** A player cannot go before
+ * pick 1 but can fall a long way, so the real distribution has a fatter right
+ * tail than this — Barkley's observed low of 33 is 3.7 sigma out where a normal
+ * would put it near zero probability. The bias therefore runs one way: this
+ * *understates* the chance a player falls to you. Erring toward "he will be
+ * gone" is the safer direction for a draft aid, but it is an error.
+ *
+ * **Where there is no spread, this degrades to a step function** rather than
+ * inventing a dispersion — available if his price is at or past your pick, gone
+ * if it is not. That is the honest floor: FFC's 2026 file stops at pick 190, so
+ * essentially everyone past the draft has no spread, and inside the draft it is
+ * one player (Andy Borregales). The basis travels with the number so the screen
+ * can say which of the two it is looking at.
+ */
+export function survivalOf(player: ValuePlayer, target: PickTarget | null): {
+  p: number | null;
+  basis: SurvivalBasis;
+} {
+  if (!target) return { p: null, basis: "none" };
+
+  const picks =
+    target.kind === "pick"
+      ? [target.pick]
+      : // Averaged across the window, which is the expectation over a seat that
+        // is equally likely to be any of the twelve. Not the midpoint: the curve
+        // is not linear across twelve picks near a player's own price, and the
+        // mean of the probabilities is the quantity actually wanted.
+        Array.from({ length: target.to - target.from + 1 }, (_, i) => target.from + i);
+
+  const spread = player.spread;
+
+  if (!spread) {
+    const available = picks.filter((pick) => player.adp >= pick).length;
+    return { p: available / picks.length, basis: "step" };
+  }
+
+  const gap = Math.abs(player.adp - spread.adp);
+  const sigma = Math.sqrt(spread.stdev * spread.stdev + gap * gap);
+
+  // A stdev of exactly 0 with no gap would divide by zero. It does not occur in
+  // the live data — `adp_spread()` filters out null stdevs and the smallest real
+  // one is 0.7 — but a zero-width distribution is a step function by definition,
+  // so it is answered as one rather than guarded with an exception.
+  if (sigma === 0) {
+    const available = picks.filter((pick) => player.adp >= pick).length;
+    return { p: available / picks.length, basis: "step" };
+  }
+
+  // P(his draft position >= this pick). Treated as continuous: the half-pick a
+  // continuity correction would add is immaterial against a sigma of 3 to 20,
+  // and pretending otherwise would imply a precision the inputs do not have.
+  const total = picks.reduce((sum, pick) => sum + (1 - normalCdf((pick - player.adp) / sigma)), 0);
+
+  return { p: total / picks.length, basis: "modeled" };
+}
+
+/** A rail row: a dot, what it is likely to cost you to wait, and the sort key. */
+export type RailEntry = {
+  dot: Dot;
+  /** `null` when no round is chosen and availability is not in play. */
+  survival: number | null;
+  basis: SurvivalBasis;
+  /** What the rail sorted on. Identical to `dot.residual` in `value` mode. */
+  score: number;
+};
+
+/**
+ * Order the rail, and say who was left out.
+ *
+ * This is the whole of the fix. It reorders and filters; it creates no
+ * coordinate and mutates nothing, so the scatter beside it cannot be affected by
+ * anything decided here.
+ *
+ * The two modes are Kevin's call — both, as a toggle, the same answer he gave for
+ * the season window — and they ask genuinely different questions:
+ *
+ * - **`value`** ranks on the residual alone and *excludes* anyone below
+ *   `SURVIVAL_FLOOR`. "What is the best value that could still fall to me."
+ *   Honest and simple: one number decides the order, and availability only
+ *   decides who is eligible to appear.
+ * - **`draft`** ranks on the **expected** residual — the residual discounted by
+ *   the chance of actually getting him. "What is the best value I can expect to
+ *   capture." Nobody is excluded; a certainty sinks to the bottom on its own.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE BLEND IS AN EXPECTATION AND NOT A PENALTY, which took a measurement
+ * over the live board to settle.
+ *
+ * The first version docked a player a tunable share of the axis for how likely he
+ * was to be gone — `residual - penalty * (1 - survival) * range`. It needed a
+ * constant nobody could calibrate, and measured against real rows it was simply
+ * too weak: on the `total` vertical at round 4, **Puka Nacua at a survival of
+ * literally zero still ranked third** on a list headed "best available", because
+ * his residual of +149 was further above the field than half the axis. Raising
+ * the constant until that stopped happening pushed it to 1.0, at which point it
+ * was no longer a weighting so much as an exclusion with extra arithmetic.
+ *
+ * `survival × residual` needs no constant, because it is a quantity rather than a
+ * policy: the value you can expect to capture. A coin-flip at +40 scores 20 and
+ * therefore ranks below a certainty at +25, which is the correct answer to "what
+ * should I expect" and is exactly the trade a drafter is making. It also lands
+ * the zero-survival cases where they belong — Nacua scores 0 rather than third.
+ *
+ * **Availability discounts a bargain and never flatters a bust.** For a negative
+ * residual the survival factor is dropped, because multiplying a bust by a small
+ * probability would rank the busts most likely to be gone *above* the ones still
+ * there — arithmetically true and useless. The two branches agree at zero, so the
+ * score is continuous across it.
+ *
+ * With no target the two modes are identical by construction, and that is
+ * deliberate: **before a round is chosen this screen behaves exactly as it did
+ * before any of this existed.**
+ */
+export function rankRail(
+  dots: Dot[],
+  {
+    mode,
+    target,
+    floor = SURVIVAL_FLOOR,
+  }: {
+    mode: RailMode;
+    target: PickTarget | null;
+    floor?: number;
+  },
+): { entries: RailEntry[]; excluded: number } {
+  const scored: RailEntry[] = dots.map((dot) => {
+    const { p, basis } = survivalOf(dot.player, target);
+    return {
+      dot,
+      survival: p,
+      basis,
+      score:
+        mode === "draft" && p != null && dot.residual > 0 ? p * dot.residual : dot.residual,
+    };
+  });
+
+  const entries =
+    mode === "value"
+      ? scored.filter((entry) => entry.survival == null || entry.survival >= floor)
+      : scored;
+
+  // Sorted on the score, then on the player id, so a rerun on unchanged input
+  // cannot reorder ties — the same reason `market_value()` breaks its rank ties
+  // on player_id rather than leaving them to the planner.
+  entries.sort(
+    (a, b) =>
+      b.score - a.score ||
+      (a.dot.player.player_id ?? "").localeCompare(b.dot.player.player_id ?? ""),
+  );
+
+  return { entries, excluded: scored.length - entries.length };
+}
