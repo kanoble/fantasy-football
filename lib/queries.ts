@@ -15,7 +15,22 @@ import {
   type PositionContext,
   type SeasonRow,
 } from "./board";
-import type { FormSeason, MarketValue, ValuePlayer } from "./value";
+import type { AdpSpread, FormSeason, MarketValue, ValuePlayer } from "./value";
+
+/**
+ * One raw row of `adp_spread()`, in the column names SQL returns.
+ *
+ * Kept here rather than in `lib/value.ts` beside `AdpSpread` because they are
+ * different shapes on purpose: this is the wire format, and `AdpSpread` is what
+ * the model reads — where `adp` needs no `spread_` prefix to say whose it is,
+ * because the type it hangs off says so.
+ */
+type SpreadRow = {
+  norm_name: string;
+  spread_adp: number;
+  stdev: number;
+  times_drafted: number | null;
+};
 import { createClient } from "./supabase/server";
 
 /**
@@ -135,7 +150,7 @@ export type MarketData = {
 export async function fetchMarket(): Promise<MarketData> {
   const supabase = await createClient();
 
-  const [membership, board, value, form, freshness] = await Promise.all([
+  const [membership, board, value, form, spread, freshness] = await Promise.all([
     supabase.rpc("is_league_member"),
     supabase.rpc("draft_board", {
       p_adp_season: ADP_SEASON,
@@ -149,6 +164,11 @@ export async function fetchMarket(): Promise<MarketData> {
     // here that could drift from it.
     supabase.rpc("market_value", { p_adp_season: ADP_SEASON }),
     supabase.rpc("season_form", { p_adp_season: ADP_SEASON, p_stat_season: STAT_SEASON }),
+    // `0011`, and the same reasoning: the source stays in SQL beside the spread
+    // it describes. A fifth read rather than a wider fourth one, because this is
+    // a fact about one season's price where `market_value()` is a career figure —
+    // see the head of the migration.
+    supabase.rpc("adp_spread", { p_adp_season: ADP_SEASON }),
     supabase.rpc("data_freshness"),
   ]);
 
@@ -156,6 +176,7 @@ export async function fetchMarket(): Promise<MarketData> {
   if (board.error) throw board.error;
   if (value.error) throw value.error;
   if (form.error) throw form.error;
+  if (spread.error) throw spread.error;
 
   const isMember = membership.data === true;
   const rows = isMember ? ((board.data ?? []) as BoardRow[]) : [];
@@ -177,6 +198,20 @@ export async function fetchMarket(): Promise<MarketData> {
   }
   for (const seasons of formById.values()) seasons.sort((a, b) => b.season - a.season);
 
+  // Keyed on `norm_name` and not `player_id`, which is `0011`'s own measurement
+  // rather than a preference: across the 179 board rows inside the draft,
+  // `norm_name` matches 178 and `player_id` matches 177, because `adp_history`
+  // leaves the id null wherever the name resolved to nobody. It is also the key
+  // `drafted` chose in `0005`, for the same reason.
+  const spreadByName = new Map<string, AdpSpread>();
+  for (const row of (isMember ? ((spread.data ?? []) as SpreadRow[]) : [])) {
+    spreadByName.set(row.norm_name, {
+      adp: row.spread_adp,
+      stdev: row.stdev,
+      drafts: row.times_drafted,
+    });
+  }
+
   return {
     isMember,
     freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
@@ -195,6 +230,7 @@ export async function fetchMarket(): Promise<MarketData> {
         median_delta: value?.median_delta ?? null,
         priced_seasons: value?.priced_seasons ?? 0,
         form: (row.player_id ? formById.get(row.player_id) : undefined) ?? [],
+        spread: spreadByName.get(row.norm_name) ?? null,
       };
     }),
   };

@@ -11,8 +11,16 @@ import {
   figureFor,
   logCost,
   neighborhood,
+  nextPick,
+  normalCdf,
+  rankRail,
+  roundWindow,
   scopeModel,
+  seatPicks,
+  survivalOf,
   type FormSeason,
+  type PickTarget,
+  type RailMode,
   type ValuePlayer,
 } from "./value.ts";
 
@@ -59,6 +67,10 @@ function player(overrides: Partial<ValuePlayer> & { name: string }): ValuePlayer
     median_delta: null,
     priced_seasons: 0,
     form: [],
+    // No published spread by default, so a fixture that says nothing about
+    // availability gets the step-function fallback rather than a made-up
+    // dispersion. The availability cases below opt in explicitly.
+    spread: null,
     ...overrides,
   };
 }
@@ -567,5 +579,431 @@ describe("scopeModel — the scope removes dots and moves nothing", () => {
       near(dot.y, before.y, `${dot.player.name} y under both`);
       assert.ok(!drafted.has(dot.player.norm_name));
     }
+  });
+});
+
+/* ===========================================================================
+ * AVAILABILITY
+ *
+ * The rail asked "who is the best value in the draft" when a drafter is only
+ * ever asking "who is the best value I can still get". These cover the fix, and
+ * the last block is the one that matters: re-ranking a list must not move a dot.
+ * =========================================================================== */
+
+/**
+ * Looser than `near`, and deliberately so.
+ *
+ * `normalCdf` is an approximation with an absolute error below 7.5e-8, so
+ * asserting probabilities at `near`'s 1e-9 would be asserting the approximation
+ * rather than the arithmetic. 1e-6 is three digits tighter than anything shown
+ * on screen, where these are rendered as whole percents.
+ */
+const close = (actual: number, expected: number, what: string, tolerance = 1e-6) =>
+  assert.ok(
+    Math.abs(actual - expected) < tolerance,
+    `${what}: expected ${expected}, got ${actual}`,
+  );
+
+describe("seatPicks — the snake, and why a seat matters at all", () => {
+  it("runs odd rounds forward and even rounds back", () => {
+    assert.deepEqual(seatPicks(1, { rounds: 4 }), [1, 24, 25, 48]);
+    assert.deepEqual(seatPicks(12, { rounds: 4 }), [12, 13, 36, 37]);
+    assert.deepEqual(seatPicks(6, { rounds: 4 }), [6, 19, 30, 43]);
+  });
+
+  it("gives every seat the same number of picks", () => {
+    for (let seat = 1; seat <= 12; seat += 1) {
+      assert.equal(seatPicks(seat).length, 16, `seat ${seat} gets sixteen picks`);
+    }
+  });
+
+  it("covers every pick in the draft exactly once across the twelve seats", () => {
+    const all = Array.from({ length: 12 }, (_, index) => seatPicks(index + 1)).flat().sort((a, b) => a - b);
+    assert.deepEqual(all, Array.from({ length: 192 }, (_, index) => index + 1));
+  });
+
+  it("makes the gap between your picks wildly seat-dependent, which is the point", () => {
+    // The documented reason a seat is worth having rather than just a round: at
+    // the turn you wait twenty-two picks and then pick twice, and in the middle
+    // you wait twelve every time. "Who will still be there" is a different
+    // question in those two seats, and a round window cannot tell them apart.
+    const gaps = (seat: number) =>
+      seatPicks(seat)
+        .slice(1)
+        .map((pick, index) => pick - seatPicks(seat)[index]!);
+
+    assert.deepEqual(new Set(gaps(1)), new Set([23, 1]), "seat 1 alternates a long wait and a pair");
+    assert.deepEqual(new Set(gaps(12)), new Set([1, 23]), "seat 12 likewise, offset by one round");
+    assert.deepEqual(new Set(gaps(6)), new Set([13, 11]), "a middle seat waits about a round every time");
+  });
+});
+
+describe("nextPick", () => {
+  it("is your first pick before anybody has gone", () => {
+    assert.equal(nextPick(6, 0), 6);
+    assert.equal(nextPick(1, 0), 1);
+  });
+
+  it("advances as the room picks", () => {
+    assert.equal(nextPick(6, 5), 6, "you are on the clock");
+    assert.equal(nextPick(6, 6), 19, "your pick has gone, the next is at the turn");
+    assert.equal(nextPick(6, 18), 19);
+    assert.equal(nextPick(6, 19), 30);
+  });
+
+  it("returns null past the end of the draft rather than a pick that does not exist", () => {
+    assert.equal(nextPick(6, 192), null);
+    assert.equal(nextPick(12, 191), null, "seat 12's last pick is 181, so 191 is past it");
+  });
+});
+
+describe("roundWindow — what a round says without a seat", () => {
+  it("is the twelve picks of that round, whichever way the snake runs", () => {
+    assert.deepEqual(roundWindow(1), { kind: "round", from: 1, to: 12 });
+    assert.deepEqual(roundWindow(4), { kind: "round", from: 37, to: 48 });
+    assert.deepEqual(roundWindow(16), { kind: "round", from: 181, to: 192 });
+  });
+});
+
+describe("normalCdf", () => {
+  it("reproduces the values everybody knows", () => {
+    close(normalCdf(0), 0.5, "the middle");
+    close(normalCdf(1), 0.8413447, "one sigma", 1e-6);
+    close(normalCdf(-1), 0.1586553, "minus one sigma", 1e-6);
+    close(normalCdf(1.959964), 0.975, "the 97.5th percentile", 1e-6);
+    close(normalCdf(2.575829), 0.995, "the 99.5th percentile", 1e-6);
+  });
+
+  it("is symmetric about zero", () => {
+    for (const z of [0.1, 0.5, 1, 2, 3]) {
+      close(normalCdf(z) + normalCdf(-z), 1, `symmetry at ${z}`);
+    }
+  });
+});
+
+describe("survivalOf — with no spread it degrades to a step, and says so", () => {
+  const plain = player({ name: "No Spread", adp: 100 });
+
+  it("is not in play at all without a target", () => {
+    assert.deepEqual(survivalOf(plain, null), { p: null, basis: "none" });
+  });
+
+  it("is a step function on his price alone", () => {
+    assert.deepEqual(survivalOf(plain, { kind: "pick", pick: 50 }), { p: 1, basis: "step" });
+    assert.deepEqual(survivalOf(plain, { kind: "pick", pick: 150 }), { p: 0, basis: "step" });
+    assert.deepEqual(survivalOf(plain, { kind: "pick", pick: 100 }), { p: 1, basis: "step" });
+  });
+
+  it("averages the step across a round window", () => {
+    // Picks 96-107, of which he survives 96 through 100 — five of twelve.
+    const result = survivalOf(plain, { kind: "round", from: 96, to: 107 });
+    close(result.p!, 5 / 12, "a step averaged over a window is a fraction");
+    assert.equal(result.basis, "step");
+  });
+});
+
+describe("survivalOf — the spread is widened before it is used", () => {
+  it("is a coin flip at his own price when the two sources agree", () => {
+    // Gap zero, so sigma is the stdev and the pick is the mean.
+    const agreed = player({ name: "Agreed", adp: 20, spread: { adp: 20, stdev: 4, drafts: 900 } });
+    const result = survivalOf(agreed, { kind: "pick", pick: 20 });
+    close(result.p!, 0.5, "at the centre of his own distribution");
+    assert.equal(result.basis, "modeled");
+  });
+
+  it("falls as the pick gets later and never leaves 0..1", () => {
+    const subject = player({ name: "Any", adp: 20, spread: { adp: 20, stdev: 4, drafts: 900 } });
+    const at = (pick: number) => survivalOf(subject, { kind: "pick", pick })!.p!;
+
+    assert.ok(at(5) > at(15) && at(15) > at(20) && at(20) > at(30) && at(30) > at(40));
+    for (const pick of [1, 10, 20, 50, 200]) {
+      const p = at(pick);
+      assert.ok(p >= 0 && p <= 1, `a probability at pick ${pick}, got ${p}`);
+    }
+  });
+
+  it("lands near the other source's own answer, which is what makes the widening more than a fudge", () => {
+    // Saquon Barkley, 2026: Sleeper says 13.9, FFC says 20.1 with a stdev of 3.5.
+    // Believing Sleeper's centre with FFC's raw spread says he cannot last to
+    // pick 25 — a fifth of a percent. Adding the disagreement in quadrature says
+    // 6%, against the 8% FFC's own centre and spread give on their own terms.
+    const barkley = player({ name: "Barkley", adp: 13.9, spread: { adp: 20.1, stdev: 3.5, drafts: 1945 } });
+    const widened = survivalOf(barkley, { kind: "pick", pick: 25 }).p!;
+
+    const naive = 1 - normalCdf((25 - 13.9) / 3.5);
+    const native = 1 - normalCdf((25 - 20.1) / 3.5);
+
+    assert.ok(naive < 0.005, `the naive mixture is overconfident: ${naive}`);
+    close(widened, 0.0595, "the widened estimate", 5e-4);
+    assert.ok(
+      Math.abs(widened - native) < 0.03,
+      `the widening should land near the native answer: ${widened} against ${native}`,
+    );
+  });
+
+  it("widens more where the sources disagree more", () => {
+    const stdev = 3;
+    const agreeing = player({ name: "Agreeing", adp: 40, spread: { adp: 40, stdev, drafts: 500 } });
+    const arguing = player({ name: "Arguing", adp: 40, spread: { adp: 60, stdev, drafts: 500 } });
+
+    // Both are priced at 40 on the axis; only the disagreement differs. The one
+    // nobody agrees about must be less certain to be gone by pick 55.
+    const target = { kind: "pick", pick: 55 } as const;
+    assert.ok(
+      survivalOf(arguing, target).p! > survivalOf(agreeing, target).p!,
+      "disagreement between sources is uncertainty, and uncertainty cuts both ways",
+    );
+  });
+
+  it("answers a zero-width spread as the step function it is, rather than dividing by zero", () => {
+    const certain = player({ name: "Certain", adp: 30, spread: { adp: 30, stdev: 0, drafts: 10 } });
+    assert.deepEqual(survivalOf(certain, { kind: "pick", pick: 40 }), { p: 0, basis: "step" });
+    assert.deepEqual(survivalOf(certain, { kind: "pick", pick: 20 }), { p: 1, basis: "step" });
+  });
+});
+
+/**
+ * THE OTHER ONE THAT MATTERS.
+ *
+ * `scopeModel`'s invariance is asserted above. This is the same property for the
+ * new control: changing the round, the seat or the ranking mode re-orders a list
+ * and must not touch a coordinate. If this ever fails, the screen has started
+ * telling the reader about the control rather than about the players.
+ */
+describe("rankRail — re-ranking moves nothing", () => {
+  const roster = Array.from({ length: 20 }, (_, index) =>
+    player({
+      name: `RB ${index}`,
+      adp: 4 + index * 9,
+      spread: { adp: 4 + index * 9 + (index % 3) * 4, stdev: 2 + index * 0.6, drafts: 900 - index * 40 },
+      form: [{ season: STAT_SEASON, games: 17, median: 24 - index + (index % 4) * 3, total: 0 }],
+    }),
+  );
+
+  const baseline = buildModel(roster, {
+    vertical: "median",
+    lookback: "last",
+    statSeason: STAT_SEASON,
+    neighbors: 5,
+  });
+
+  const targets: (PickTarget | null)[] = [
+    null,
+    roundWindow(1),
+    roundWindow(4),
+    roundWindow(9),
+    roundWindow(16),
+    { kind: "pick", pick: 6 },
+    { kind: "pick", pick: 40 },
+    { kind: "pick", pick: 137 },
+  ];
+
+  for (const mode of ["value", "draft"] as RailMode[]) {
+    for (const target of targets) {
+      const label = target == null ? "no target" : target.kind === "pick" ? `pick ${target.pick}` : `round ${target.from}-${target.to}`;
+
+      it(`holds every coordinate in ${mode} mode at ${label}`, () => {
+        const { entries } = rankRail(baseline.dots, { mode, target });
+
+        for (const entry of entries) {
+          const before = baseline.dots.find((dot) => dot.player.name === entry.dot.player.name)!;
+          near(entry.dot.x, before.x, `${entry.dot.player.name} x`);
+          near(entry.dot.y, before.y, `${entry.dot.player.name} y`);
+          near(entry.dot.residual, before.residual, `${entry.dot.player.name} residual`);
+          near(entry.dot.expected, before.expected, `${entry.dot.player.name} expectation`);
+          assert.equal(entry.dot.clamped, before.clamped, "and the clamp flag is untouched");
+        }
+      });
+    }
+  }
+
+  it("leaves the model's own dot array alone", () => {
+    const order = baseline.dots.map((dot) => dot.player.name);
+    rankRail(baseline.dots, { mode: "draft", target: roundWindow(4) });
+    rankRail(baseline.dots, { mode: "value", target: { kind: "pick", pick: 40 } });
+    assert.deepEqual(baseline.dots.map((dot) => dot.player.name), order, "sorted a copy, not the model");
+  });
+});
+
+describe("rankRail — the fix itself", () => {
+  /**
+   * The shape of the actual defect. An elite player who beats his price and is
+   * long gone by pick 40, against a modest one who will still be there.
+   *
+   * With the axis corrected the real rail topped out at McCaffrey (ADP 5.2) and
+   * Puka Nacua (4.6) — arithmetically right and useless at pick 40.
+   */
+  const elite = player({
+    name: "Elite",
+    adp: 5,
+    spread: { adp: 5, stdev: 1.5, drafts: 1200 },
+    form: [{ season: STAT_SEASON, games: 17, median: 22, total: 0 }],
+  });
+
+  const modest = player({
+    name: "Modest",
+    adp: 45,
+    spread: { adp: 45, stdev: 6, drafts: 700 },
+    form: [{ season: STAT_SEASON, games: 17, median: 17, total: 0 }],
+  });
+
+  const field = [
+    elite,
+    modest,
+    ...Array.from({ length: 14 }, (_, index) =>
+      player({
+        name: `Filler ${index}`,
+        adp: 8 + index * 11,
+        spread: { adp: 8 + index * 11, stdev: 3 + index, drafts: 600 },
+        form: [{ season: STAT_SEASON, games: 17, median: 14 - index * 0.4, total: 0 }],
+      }),
+    ),
+  ];
+
+  const model = buildModel(field, {
+    vertical: "median",
+    lookback: "last",
+    statSeason: STAT_SEASON,
+    neighbors: 5,
+  });
+
+  const rank = (mode: RailMode, target: PickTarget | null) =>
+    rankRail(model.dots, { mode, target });
+
+  it("ranks the elite player first when no round is chosen, in both modes", () => {
+    // Before a round is chosen the screen must behave exactly as it did before
+    // any of this existed, and the two modes must be indistinguishable.
+    for (const mode of ["value", "draft"] as RailMode[]) {
+      assert.equal(rank(mode, null).entries[0]!.dot.player.name, "Elite", `${mode} with no target`);
+      assert.equal(rank(mode, null).excluded, 0, "and nobody is dropped");
+    }
+  });
+
+  it("drops him from `value` mode at pick 40, because he cannot be had", () => {
+    const { entries, excluded } = rank("value", { kind: "pick", pick: 40 });
+    assert.ok(!entries.some((entry) => entry.dot.player.name === "Elite"), "gone from the list");
+    assert.ok(excluded > 0, "and counted rather than silently dropped");
+    assert.equal(entries[0]!.dot.player.name, "Modest", "the best value actually available leads");
+  });
+
+  it("demotes rather than drops him in `draft` mode", () => {
+    const { entries, excluded } = rank("draft", { kind: "pick", pick: 40 });
+    assert.equal(excluded, 0, "the blend excludes nobody; the penalty does the work");
+
+    const names = entries.map((entry) => entry.dot.player.name);
+    assert.ok(names.indexOf("Modest") < names.indexOf("Elite"), "the available player ranks higher");
+    assert.ok(names.includes("Elite"), "but a genuine value stays visible in case he falls");
+  });
+
+  it("still ranks him first when you pick ahead of his price, in both modes", () => {
+    for (const mode of ["value", "draft"] as RailMode[]) {
+      const { entries } = rank(mode, { kind: "pick", pick: 2 });
+      assert.equal(entries[0]!.dot.player.name, "Elite", `${mode} at pick 2`);
+    }
+  });
+
+  it("treats a player priced at exactly your pick as the coin flip he is", () => {
+    // A consequence of ranking on an expectation, and worth pinning because it
+    // surprises: "available at pick 5" means nobody took him in picks 1-4, and
+    // his own mean is 5 — so it is even money, and `draft` mode halves him. That
+    // is the right answer to "what should I expect to capture" and it does make
+    // the mode conservative about reaching. `value` mode is the one that ignores
+    // it, which is most of why both exist.
+    const target = { kind: "pick", pick: 5 } as const;
+
+    const eliteEntry = rank("draft", target).entries.find((e) => e.dot.player.name === "Elite")!;
+    close(eliteEntry.survival!, 0.5, "even money at his own price", 1e-6);
+    // Against the exact product rather than against 0.5, because `near`'s 1e-9
+    // is tighter than `normalCdf`'s own approximation error.
+    near(
+      eliteEntry.score,
+      eliteEntry.survival! * eliteEntry.dot.residual,
+      "so the blend halves his residual",
+    );
+    close(eliteEntry.score, 0.5 * eliteEntry.dot.residual, "which is half of it", 1e-6);
+
+    assert.equal(
+      rank("value", target).entries[0]!.dot.player.name,
+      "Elite",
+      "while value mode still leads with him",
+    );
+  });
+
+  it("keeps the residual as the score in `value` mode and changes it in `draft`", () => {
+    const target = { kind: "pick", pick: 40 } as const;
+    for (const entry of rank("value", target).entries) {
+      near(entry.score, entry.dot.residual, `${entry.dot.player.name} scores on residual alone`);
+    }
+
+    const blended = rank("draft", target).entries.find((entry) => entry.dot.player.name === "Elite")!;
+    assert.ok(blended.score < blended.dot.residual, "the blend discounts a player who will be gone");
+    near(
+      blended.score,
+      blended.survival! * blended.dot.residual,
+      "and the score is exactly the expected residual",
+    );
+  });
+
+  it("discounts a bargain but never flatters a bust", () => {
+    // Multiplying a negative residual by a small probability would rank the
+    // busts most likely to be gone above the ones still on the board — true
+    // arithmetic and a useless list. The survival factor applies to bargains
+    // only, and the two branches agree at zero so the score stays continuous.
+    const busts = [
+      player({
+        name: "Gone Bust",
+        adp: 5,
+        spread: { adp: 5, stdev: 1.5, drafts: 1200 },
+        form: [{ season: STAT_SEASON, games: 17, median: 2, total: 0 }],
+      }),
+      player({
+        name: "Present Bust",
+        adp: 60,
+        spread: { adp: 60, stdev: 5, drafts: 700 },
+        form: [{ season: STAT_SEASON, games: 17, median: 2, total: 0 }],
+      }),
+      ...field,
+    ];
+
+    const withBusts = buildModel(busts, {
+      vertical: "median",
+      lookback: "last",
+      statSeason: STAT_SEASON,
+      neighbors: 5,
+    });
+
+    const { entries } = rankRail(withBusts.dots, { mode: "draft", target: { kind: "pick", pick: 40 } });
+    const gone = entries.find((entry) => entry.dot.player.name === "Gone Bust")!;
+    const present = entries.find((entry) => entry.dot.player.name === "Present Bust")!;
+
+    assert.ok(gone.dot.residual < 0 && present.dot.residual < 0, "both are genuinely bad");
+    near(gone.score, gone.dot.residual, "a bust keeps its own residual, undiscounted");
+    near(present.score, present.dot.residual, "and so does the one still available");
+  });
+
+  it("orders ties deterministically, so a poll cannot reshuffle the list", () => {
+    const tied = Array.from({ length: 10 }, (_, index) =>
+      player({
+        name: `Same ${index}`,
+        adp: 20 + index * 12,
+        form: [{ season: STAT_SEASON, games: 17, median: 12, total: 0 }],
+      }),
+    );
+
+    const flat = buildModel(tied, {
+      vertical: "median",
+      lookback: "last",
+      statSeason: STAT_SEASON,
+      neighbors: 5,
+    });
+
+    const once = rankRail(flat.dots, { mode: "value", target: null });
+    const again = rankRail([...flat.dots].reverse(), { mode: "value", target: null });
+
+    assert.deepEqual(
+      once.entries.map((entry) => entry.dot.player.name),
+      again.entries.map((entry) => entry.dot.player.name),
+      "the same input in a different order gives the same list",
+    );
   });
 });

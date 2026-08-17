@@ -1262,6 +1262,66 @@ code {
   outline-offset: 2px;
 }
 
+/* A disabled chip had no treatment at all until /market grew two more of them,
+   so it looked pressable and did nothing. `--muted` is 3.81:1 and below this
+   project's 4.5:1 floor deliberately: WCAG 1.4.3 exempts disabled controls, and
+   a disabled chip that reads at full strength is worse — it invites the click.
+   Every disabled control on this screen also has prose beside it saying why. */
+.chip:disabled {
+  color: var(--muted);
+  border-color: var(--rule);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.chip:disabled:hover {
+  border-color: var(--rule);
+  color: var(--muted);
+}
+
+/* Sixteen rounds is too many for chips and a drafter picks one calmly, weeks
+   before the day. The seat next to it is the opposite case and stays as
+   buttons. */
+.mkt-select {
+  font-family: var(--body);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--firm);
+  padding: 0.2rem 0.4rem;
+  border-radius: 2px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.mkt-select:hover:not(:disabled) {
+  border-color: var(--muted);
+  color: var(--ink);
+}
+
+.mkt-select:disabled {
+  color: var(--muted);
+  border-color: var(--rule);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.mkt-select:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* One tap, and a fixed width so twelve single digits do not jitter — the same
+   reason every figure in this app is set in the mono face. */
+.mkt-seat {
+  font-family: var(--mono);
+  min-width: 1.9rem;
+  padding-inline: 0.35rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .search {
   font-family: var(--body);
   font-size: 0.75rem;
@@ -3251,6 +3311,15 @@ table.log td.z {
   font-size: 0.68rem;
   line-height: 1.45;
   color: var(--dim);
+}
+
+/* The odds sit inside `.mkt-item-meta` and inherit its colour, so they are on
+   `--dim` like everything else added since the contrast pass. Tabular because
+   the column is a stack of percentages and proportional digits would make it
+   crawl. `help` rather than `default` because it carries a title. */
+.mkt-odds {
+  font-variant-numeric: tabular-nums;
+  cursor: help;
 }
 
 .mkt-reason {
