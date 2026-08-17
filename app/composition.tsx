@@ -74,14 +74,22 @@ export function Composition({
           .map((share) => `${share.label} ${pc(share.share)}`)
           .join(", ")}`
       }>
-        {positive.map((share, index) => (
+        {positive.map((share, index) => {
+          const step = STEPS[index] ?? STEPS[STEPS.length - 1]!;
+          return (
           <span
             key={share.label}
-            className="comp-seg"
+            // `solid` marks the one segment drawn at full team strength. Its
+            // label knocks out; every faded step's label does not. See the
+            // note on `.comp-lab` in globals.css.
+            className={`comp-seg${step === 1 ? " solid" : ""}`}
             style={{
               width: `${share.share * 100}%`,
-              opacity: STEPS[index] ?? STEPS[STEPS.length - 1],
-            }}
+              // Drives the fill only, through a pseudo-element. Setting
+              // `opacity` on this element would fade the label with it, which
+              // is what made every step past the first unreadable.
+              "--step": step,
+            } as React.CSSProperties}
             title={`${share.label} · ${f1(share.points)} points · ${pc(share.share)}`}
           >
             {/* Labelled inside only when the segment can hold the words. At
@@ -95,7 +103,8 @@ export function Composition({
               </span>
             ) : null}
           </span>
-        ))}
+          );
+        })}
       </div>
 
       {negative.length > 0 ? (
