@@ -26,6 +26,7 @@ export function Plot({
   q1,
   q3,
   empty,
+  field,
 }: {
   points: number[] | null;
   weeks?: number[] | null;
@@ -35,11 +36,43 @@ export function Plot({
   /** Shown instead of the distribution when there is none. The three reasons a
    *  row can be empty read identically otherwise — see `rowState`. */
   empty?: string;
+  /**
+   * The startable field at this player's position, in the same units.
+   *
+   * Optional, and the board deliberately does not pass it: 923 rows each
+   * carrying their position's quartiles is a second aggregate per row to draw
+   * a comparison nobody makes while scanning a list. On a career, where every
+   * row is the same man in a different year, it is the whole question — it
+   * turns "his median slid from 15.4 to 14.3" into whether the field slid with
+   * him.
+   */
+  field?: { p25: number | null; p50: number | null; p75: number | null } | null;
 }) {
   const drawable = points != null && q1 != null && q3 != null && median != null;
+  const hasField = field?.p25 != null && field?.p75 != null;
 
   return (
     <span className="plot">
+      {/* Behind everything, including the gridlines: this is the ground the
+          season is standing on, not a mark on the same layer as his own. */}
+      {hasField ? (
+        <span
+          className="field"
+          style={{
+            left: `${pct(field!.p25!)}%`,
+            width: `${pct(field!.p75!) - pct(field!.p25!)}%`,
+          }}
+          title={`the field's middle 50%: ${field!.p25!.toFixed(1)}–${field!.p75!.toFixed(1)}`}
+        />
+      ) : null}
+      {field?.p50 != null ? (
+        <span
+          className="fieldmed"
+          style={{ left: `${pct(field.p50)}%` }}
+          title={`field median ${field.p50.toFixed(1)}`}
+        />
+      ) : null}
+
       {GRIDLINES.map((line) => (
         <span
           key={line}

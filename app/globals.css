@@ -917,9 +917,24 @@ code {
   outline-offset: 1px;
 }
 
-/* season | G | total | median | iqr | 20+ | best | plot | chevron */
+/* season | rank | G | total | median | iqr | 20+ | best | plot | chevron */
 .r-season {
-  grid-template-columns: 5rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+  grid-template-columns: 5rem 4rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+}
+
+/* Position rank. Set in ink rather than dimmed like the counts beside it: it
+   is the one figure on the row that says whether the median next to it was
+   any good, which is the question the whole column exists to answer. */
+.rank {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A season outside the startable pool. Dimmed rather than flagged — finishing
+   RB41 is an ordinary thing that happens to most careers, not an alarm. */
+.rank.out {
+  color: var(--faint);
+  font-weight: 400;
 }
 
 /* player | median | iqr | plot */
@@ -1211,6 +1226,35 @@ code {
 
 .plot .gl.th {
   background: var(--firm);
+}
+
+/* The field: the middle 50% of weekly scores among startable players at this
+   position. Drawn under the gridlines, in no colour of its own — it is the
+   ground the season stands on, not another mark competing with it. If his own
+   band sits right of this one he beat the field; the two medians are the
+   comparison, and neither needs a label to make it. */
+.plot .field {
+  position: absolute;
+  /* Full height on purpose. His own band is inset 0.28rem top and bottom, so
+     the field shows as a taller shaded zone with his solid block sitting
+     inside it — which is what tells the two apart at a glance. */
+  top: 0;
+  bottom: 0;
+  /* Neutral shading rather than --band. --band is the colour of *his* middle
+     50%, and using it here would make the field read as a second, fainter
+     version of the same thing instead of as the ground behind it. */
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+/* The field's median. The one comparison the whole band exists to support is
+   this tick against his amber one, so it is a real mark rather than an edge. */
+.plot .fieldmed {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  margin-left: -0.5px;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
 .plot .band {

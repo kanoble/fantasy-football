@@ -137,6 +137,29 @@ export type SeasonRow = {
   points: number[] | null;
 };
 
+/**
+ * One row of `position_context()` — where a player sat among startable players
+ * at his position, for one season of his career.
+ *
+ * The denominator the fixed axis never had. A 14.2 median is either an
+ * excellent running back or a replaceable one, and until this the app had no
+ * way to say which. `rank` may exceed `cohort` — "RB41 of 24" is a real answer
+ * about a season outside the startable pool, and suppressing it would blank
+ * exactly the seasons carrying the worst news.
+ */
+export type PositionContext = {
+  player_id: string;
+  season: number;
+  position: string;
+  rank: number;
+  /** How many players at this position a league of this size starts. */
+  cohort: number;
+  /** Weekly quartiles across the cohort — the field, in the same units. */
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+};
+
 /** One row of `scored_weekly_stats`, as returned by `player_week_log()`. */
 export type WeekRow = {
   player_id: string;
