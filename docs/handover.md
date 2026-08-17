@@ -1,10 +1,37 @@
 # Handover
 
-State of the project as of **2026-08-16**. Read this first, then
+State of the project as of **2026-08-17**. Read this first, then
 [architecture.md](architecture.md) for design rationale and
 [scoring-rules.md](scoring-rules.md) for the league's scoring.
 
 Repo: https://github.com/kanoble/fantasy-football (public)
+
+---
+
+## Start here: which branch you are on
+
+**The working tree is on `draft-cost`, not `main`, and that is deliberate.**
+PR #7 is open and carries the draft-cost pass plus this document. `main` is at
+`7f27c21` and has none of it — including none of this handover, so if you are
+reading an older version of this file, `git checkout draft-cost`.
+
+This cost a confusion worth not repeating. The commits were made on `main`
+locally, then moved to a branch with `git branch draft-cost && git reset --hard
+origin/main` — which is the documented working shape for this repo, and which
+also silently reverted the working tree. **The dev server on port 3000 reads the
+working tree**, so it went on serving the old UI and the new column looked like
+it had never been built. If a change you just made is not on screen, check
+`git branch --show-current` before you check anything else.
+
+Immediate state:
+
+| | |
+|---|---|
+| Branch | `draft-cost`, pushed, **PR #7 open** |
+| `main` | `7f27c21`, untouched |
+| Migration `0009` | **Applied to the live database.** Nothing to run. |
+| Checks | `tsc`, `next build`, 62 pytest, `ruff` — all clean |
+| Unreviewed | Kevin has not yet looked at the cost column |
 
 ---
 
@@ -782,6 +809,25 @@ Three things it is good for, in descending order of how much they were worth:
    blue is not a representative sample of a palette that also contains
    Pittsburgh's gold.
 
+**The scripts themselves are gone.** They lived in the session scratchpad and
+were never committed, because they depend on a `playwright` install that is
+deliberately not in `package.json`. Rebuilding them is minutes, and only one is
+non-obvious — the contrast measurement, which is worth restating because
+eyeballing a screenshot is exactly what let this defect survive three sessions:
+
+> Screenshot the *label element* rather than the page. Convert each pixel to
+> relative luminance, sort, and take the mean of the darkest 8% and the mean of
+> the lightest 8% — those two clusters are the glyphs and the fill behind them,
+> whichever way round. The WCAG ratio between them is the number. It works
+> without knowing what colour anything resolved to, which is the point when the
+> colour is coming from `opacity` over a custom property under a blend mode.
+
+The other three were a width sweep (13 viewports, reporting `scrollWidth` and
+any element whose right edge passes the viewport), a hue sweep (the probe's
+`?tm=` parameter across 16 teams), and a plain `psycopg` query helper that reads
+`POSTGRES_URL_NON_POOLING` out of `.env.local` — which `config.py` does not,
+because it loads `.env`.
+
 **What it still cannot do is sign in.** `getUser()` revalidates against the auth
 server, and reading `auth.users` to mint a matching token is blocked from here.
 So the probe renders components with fixture data; it does not exercise a real
@@ -1196,14 +1242,15 @@ PRs #1–#6 are merged. **The draft-cost pass is on `draft-cost`.**
 **The draft is 30 August. That is the deadline everything below is ranked
 against**, and as of this handover it is fourteen days away.
 
-0. **Apply migration `0009` to the live database, then merge `draft-cost`.**
-   In that order, the same order `0001`–`0008` used — the code throws on a
-   missing `draft_value()` rather than degrading, consistent with the other
-   four RPCs in `fetchPlayers`. The SQL has been exercised against the live
-   data inside a transaction that was then rolled back, so it is known to
-   parse and known to return the right rows; what has not happened is the
-   commit. Writing to the database is blocked from the agent's side, so this
-   one is Kevin's to run.
+0. **Kevin looks at the cost column, then PR #7 merges.** Migration `0009` is
+   already applied, so merging is the only step left and the database needs
+   nothing. Check out `draft-cost` before starting the dev server or the screen
+   will not have it — see "Start here".
+
+   The thing worth his eye rather than the machine's: whether **Cost dimmed
+   against Rank** is the right weighting. The machine can prove both are
+   legible and cannot judge whether the row still reads result-first, which is
+   the whole intent of the dimming.
 
 1. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
    one, clear the board. The feature has never met the thing it is for, and this
@@ -1306,15 +1353,23 @@ step that ships.
 
 ## State as of the end of the 2026-08-16 draft-cost session
 
-- **PR #6 is merged. The draft-cost pass is on `draft-cost`**, two commits: the
-  composition-label fix and the cost column.
-- **Migration `0009_draft_value.sql` is written and NOT applied.** This is the
-  one thing that breaks if it is forgotten: `fetchPlayers` throws on a missing
-  RPC, so `/player/[id]` and `/compare` will error until it lands. It is
-  additive — one function, one grant, nothing dropped or narrowed — and it was
-  exercised against the live data inside a transaction that was then rolled
-  back, so it parses and returns the right rows. Writing to the database is
-  blocked from the agent's side; **Kevin has to run it.**
+- **PR #6 is merged. The draft-cost pass is on `draft-cost` as PR #7**, three
+  commits: the composition-label fix, the cost column, and this handover.
+  **`main` does not have any of it.**
+- **Migration `0009_draft_value.sql` IS applied to the live database**, before
+  the code that reads it shipped — the same order `0001`–`0008` used. Verified
+  after the fact: `prosecdef` false (SECURITY INVOKER), `provolatile` `s`
+  (stable), and `EXECUTE` granted to `authenticated` and `service_role` but not
+  `anon`. It is additive: one function, one grant, nothing dropped or narrowed.
+- **RLS on it was verified with HS256 tokens**, the way `0002`–`0008` were: a
+  member reads 16 rows, a member in different email casing reads 16, a
+  non-member reads 0, a token with no `email` claim reads 0, and `anon` is
+  refused outright with `permission denied for function draft_value`.
+- **Note this asymmetry, because it is the one thing that could confuse a
+  rollback:** the function exists in production while `main` has no code that
+  calls it. That is harmless — nothing deployed references it — but it means
+  reverting the branch does not require touching the database, and re-applying
+  `0009` is not something a future session needs to do.
 - **This machine has a browser for the first time.** See "The machine has a
   browser now". It is the reason two of the three findings below exist.
 - **The composition bar's labels were failing in both themes**, not just light
