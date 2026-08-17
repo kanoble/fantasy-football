@@ -850,22 +850,25 @@ branch, and PRs #1–#5 are all merged.
 **The draft is 30 August. That is the deadline everything below is ranked
 against**, and as of this handover it is fourteen days away.
 
-1. **Verify PR #5 on production, then rehearse a mock draft.** Two post-merge
-   checks are owed and neither has been run: that **both themes render** with the
-   new chrome, and that a drafted mark **round-trips in production** — the write
-   path has only ever been exercised against the live database with hand-signed
-   JWTs, never through a real browser session on the hosted origin. Do the
-   rehearsal in the same sitting: mark thirty players, hide them, undo one, clear
-   the board. The feature has never met the thing it is for, and this is the last
-   cheap moment to discover that "hide" was the wrong call over "grey out".
+1. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
+   one, clear the board. The feature has never met the thing it is for, and this
+   is the last cheap moment to discover that "hide" was the wrong call over "grey
+   out". It also closes the one path never exercised through a real browser
+   session on the hosted origin: the write path has only ever been driven against
+   the live database with hand-signed JWTs.
 
-   Neither PR #4 nor #5 touched `proxy.ts`, so the cron is not at risk — but the
-   check costs one `curl` and the failure it catches is invisible:
+   **What was already checked on production after PR #5 merged**, 2026-08-16:
+   `/login` serves the crest and `Sign in · Noble Family Football`, so the deploy
+   shipped; `/api/cron/refresh` answers **401 with no redirect** — the regression
+   that hides; and `/` serves a **307 to `/login`** signed out.
 
    ```bash
    curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
      https://fantasy-football-red.vercel.app/api/cron/refresh
    ```
+
+   **Still owed and needs a browser:** that both themes render on a *signed-in*
+   screen. Everything verified above is either signed-out or machine-readable.
 
 2. **Then add the other eleven league members** to `league_members`. Each needs
    pre-creating, because `disable_signup` blocks a first OAuth sign-in. **Do not
@@ -933,9 +936,12 @@ step that ships.
 - **The app is called Noble Family Football**, founded 2021, drafting 30 August.
   Kevin supplied all three; none was inferred, and the first commit deliberately
   shipped without the date and the year rather than guessing them.
-- **Two post-merge checks are outstanding**, and they are item 1 of "Next steps":
-  both themes rendering on production, and a drafted mark round-tripping through
-  a real browser session on the hosted origin.
+- **Production is confirmed running the merged header pass.** `/login` serves the
+  crest and the title `Sign in · Noble Family Football`; `/api/cron/refresh`
+  answers `401` with no redirect; `/` `307`s to `/login` signed out.
+- **Two checks still need a browser**, and they are item 1 of "Next steps": both
+  themes rendering on a *signed-in* screen, and a drafted mark round-tripping
+  through a real browser session on the hosted origin.
 - `tsc`, `next build`, 56 Python tests and `ruff` all clean.
 - **Verified without a browser**: the production build; that the pass introduces
   **no new CSS token**, which is what makes "all four theme states still resolve"
