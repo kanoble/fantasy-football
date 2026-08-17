@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono, Libre_Franklin } from "next/font/google";
 
 import "./globals.css";
+import { LEAGUE_NAME } from "@/lib/board";
 import { THEME_SCRIPT } from "@/lib/theme";
 
 // Text and figures are deliberately split. Libre Franklin has no `tnum` feature
@@ -21,7 +22,13 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Draft board",
+  // The league is the product; the page is the page. Same split the app bar
+  // makes on screen, so a browser tab reads "Compare · Noble Family Football"
+  // rather than naming one screen and never the app.
+  title: {
+    default: LEAGUE_NAME,
+    template: `%s · ${LEAGUE_NAME}`,
+  },
   description: "Every NFL week scored in this league's terms.",
   robots: { index: false, follow: false },
 };

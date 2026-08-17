@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { LEAGUE_FOUNDED, LEAGUE_NAME } from "@/lib/board";
+import { Crest } from "../chrome";
 import { SignInButton } from "./sign-in-button";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -14,8 +16,13 @@ export default async function LoginPage({
   return (
     <main className="gate">
       <div className="gate-card">
-        <p className="eyebrow">League analytics</p>
-        <h1>Draft board</h1>
+        {/* The one screen every member sees before they see anything else, so
+            it is the one place the crest is set large. */}
+        <Crest size={46} />
+        <p className="eyebrow">
+          Est. {LEAGUE_FOUNDED} · League analytics
+        </p>
+        <h1>{LEAGUE_NAME}</h1>
         <p>
           Every NFL week since 2016, scored under this league&rsquo;s own rules.
           Sign in with the Google account on the league allowlist.

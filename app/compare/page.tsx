@@ -12,12 +12,11 @@ import {
 } from "@/lib/board";
 import { fetchPlayerOptions, fetchPlayers } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
-import { Nav } from "../nav";
+import { AppBar, PageHead } from "../chrome";
 import { NotOnList } from "../not-on-list";
 import { teamClass } from "@/lib/teams";
 import { Picker } from "../picker";
 import { Axis, Plot } from "../plot";
-import { ThemeToggle } from "../theme";
 
 export const metadata: Metadata = { title: "Compare" };
 
@@ -134,7 +133,7 @@ export default async function ComparePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ cards, seasons, isMember }, { options }] = await Promise.all([
+  const [{ cards, seasons, isMember }, { options, freshness }] = await Promise.all([
     fetchPlayers(wanted),
     fetchPlayerOptions(),
   ]);
@@ -149,25 +148,12 @@ export default async function ComparePage({
 
   return (
     <main className="shell">
-      <header className="masthead">
-        <div>
-          <Nav current="compare" />
-          <h1>Compare</h1>
-          <p className="sub">
-            {STAT_SEASON} regular season · full PPR · one axis, so the shapes are
-            the comparison
-          </p>
-        </div>
-        <div className="who-am-i">
-          <span>{user?.email}</span>
-          <ThemeToggle />
-          <form action="/auth/signout" method="post">
-            <button className="linkish" type="submit">
-              Sign out
-            </button>
-          </form>
-        </div>
-      </header>
+      <AppBar current="compare" email={user?.email} />
+      <PageHead
+        title="Compare"
+        context={`${STAT_SEASON} regular season · full PPR · one axis, so the shapes are the comparison`}
+        freshness={freshness}
+      />
 
       {/* The picker sits above the result and is seeded with whatever the URL
           asked for, so changing the comparison is the same act as building one

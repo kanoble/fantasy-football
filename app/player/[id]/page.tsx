@@ -6,9 +6,8 @@ import { ADP_SEASON, STAT_SEASON, rowState } from "@/lib/board";
 import { fetchPlayer } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 import { teamClass } from "@/lib/teams";
-import { Nav } from "../../nav";
+import { AppBar, PageHead } from "../../chrome";
 import { NotOnList } from "../../not-on-list";
-import { ThemeToggle } from "../../theme";
 import { Career } from "./career";
 
 const f1 = (value: number | null | undefined) =>
@@ -38,7 +37,7 @@ export default async function PlayerPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { cards, seasons, isMember } = await fetchPlayer(id);
+  const { cards, seasons, freshness, isMember } = await fetchPlayer(id);
 
   if (!isMember) {
     return (
@@ -54,29 +53,32 @@ export default async function PlayerPage({
   if (!card) notFound();
 
   const state = rowState(card);
+  // The page is about one player, so his team's hue runs down the left of his
+  // name — the same hue his row carries on the board.
+  const tone = teamClass(card.team);
 
   return (
     <main className="shell">
-      <header className="masthead">
-        <div>
-          <Nav current="players" />
-          <h1>{card.name}</h1>
-          <p className="sub">
+      <AppBar current="players" email={user?.email} />
+      <PageHead
+        title={card.name}
+        tone={tone}
+        context={
+          <>
             {card.position ?? "—"} · {card.team ?? "free agent"} ·{" "}
             {card.career_games} career games
             {card.injury_status ? (
               <span className="flagpill q inline">{card.injury_status}</span>
             ) : null}
-          </p>
-        </div>
-        <div className="who-am-i">
+          </>
+        }
+        action={
           <Link className="linkish" href={`/compare?ids=${card.player_id}`}>
             Compare
           </Link>
-          <span>{user?.email}</span>
-          <ThemeToggle />
-        </div>
-      </header>
+        }
+        freshness={freshness}
+      />
 
       <dl className="stats">
         <Stat label={`${ADP_SEASON} ADP`} value={card.adp == null ? "undrafted" : f1(card.adp)} />
@@ -102,15 +104,9 @@ export default async function PlayerPage({
         </p>
       ) : null}
 
-      {/* The whole page is about one player, so his team colours the career
-          table's plots and its expanded panels — the same hue his row carries
-          on the board. */}
-      <Career
-        playerId={card.player_id}
-        name={card.name}
-        seasons={seasons}
-        tone={teamClass(card.team)}
-      />
+      {/* Same hue again: it colours the career table's plots and its expanded
+          panels, so the page reads as one player from top to bottom. */}
+      <Career playerId={card.player_id} name={card.name} seasons={seasons} tone={tone} />
     </main>
   );
 }

@@ -1,3 +1,5 @@
+import { Crest } from "./chrome";
+
 /**
  * What a signed-in address that is not on the league allowlist sees.
  *
@@ -10,6 +12,10 @@
 export function NotOnList({ email }: { email: string | undefined }) {
   return (
     <div className="gate-card">
+      {/* No app bar on this screen — tabs to sections that would return this
+          reader zero rows are an invitation to three more empty pages. The
+          crest still says whose app they have reached. */}
+      <Crest size={34} />
       <h1>Not on the league list</h1>
       <p>
         You are signed in as <code>{email}</code>, but that address is not in{" "}

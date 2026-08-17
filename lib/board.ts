@@ -9,6 +9,21 @@
 export const ADP_SEASON = 2026;
 export const STAT_SEASON = 2025;
 
+/** The league itself, for the chrome that names it. */
+export const LEAGUE_NAME = "Noble Family Football";
+export const LEAGUE_FOUNDED = 2021;
+
+/**
+ * Draft day, as an ISO date with no time.
+ *
+ * No time because nobody has fixed one, and an invented hour would render as
+ * fact — the same reason the dateline shows a day count rather than a clock.
+ * Update it each season alongside `ADP_SEASON`. A stale value fails quiet: the
+ * dateline drops the segment entirely once the date has passed, rather than
+ * counting down to a day in the past.
+ */
+export const DRAFT_DATE = "2026-08-30";
+
 /**
  * Fixed axis, 0–56. Every row is on one scale, or a tight end looks like a
  * running back. 56 clears the largest score in the published set — Gibbs's
@@ -170,6 +185,87 @@ export type Freshness = {
   last_full_refresh: string | null;
   rules_fingerprint: string | null;
 };
+
+/**
+ * How long until the draft, in whole days, or null once it has gone.
+ *
+ * Days rather than a date because "draft in 11 days" is the thing a drafter is
+ * actually asking, and days rather than hours because `DRAFT_DATE` carries no
+ * time — a countdown finer than its input is precision the app does not have.
+ *
+ * Both sides are compared in UTC. Local midnight would make the number tick
+ * over at a different moment for a reader in a different zone, and this is a
+ * family spread across several.
+ */
+export function draftCountdown(now: number = Date.now()): string | null {
+  const draft = Date.parse(`${DRAFT_DATE}T00:00:00Z`);
+  if (Number.isNaN(draft)) return null;
+
+  const today = new Date(now);
+  const midnight = Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate(),
+  );
+
+  const days = Math.round((draft - midnight) / 86_400_000);
+  if (days < 0) return null;
+  if (days === 0) return "draft today";
+  if (days === 1) return "draft tomorrow";
+  return `draft in ${days} days`;
+}
+
+/**
+ * The dateline: which season this is, how close the draft is, and how old the
+ * numbers are.
+ *
+ * Identical on every screen, which is the point — it is a dateline rather than
+ * a caption, so there is one place to look for "how current is this" whether
+ * you are on the board or in a career.
+ *
+ * Reads `last_success` from `pipeline_runs`, never `pipeline_meta`'s
+ * `last_full_refresh`. The latter only moves on a *full* rebuild, and an
+ * incremental run republishes ADP and the current season without touching it —
+ * so a line reading that column would report data days older than it is.
+ *
+ * Returns the relative age only. The absolute stamp goes in a `title`, because
+ * pages revalidate hourly and a rendered "6h ago" can itself be an hour stale;
+ * `datelineStamp` below is what does not drift.
+ */
+export function dateline(freshness: Freshness | null): string {
+  const stamp = freshness?.last_success;
+
+  const hours = stamp
+    ? Math.floor((Date.now() - new Date(stamp).getTime()) / 3_600_000)
+    : null;
+  const age =
+    hours == null
+      ? "data as of —"
+      : hours < 1
+        ? "data just now"
+        : hours < 24
+          ? `data ${hours}h ago`
+          : `data ${Math.floor(hours / 24)}d ago`;
+
+  return [`${ADP_SEASON} season`, draftCountdown(), age].filter(Boolean).join(" · ");
+}
+
+/** The unambiguous version of the above, for the `title` attribute. */
+export function datelineStamp(freshness: Freshness | null): string | undefined {
+  const draftDay = new Date(`${DRAFT_DATE}T00:00:00Z`).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  const stamp = freshness?.last_success;
+  const refreshed = stamp
+    ? `Last successful refresh ${new Date(stamp).toISOString().slice(0, 16).replace("T", " ")}Z`
+    : "No successful refresh recorded";
+
+  return `Draft ${draftDay} · ${refreshed}`;
+}
 
 /**
  * Three states a row can be in that are not "a player with a season", and which

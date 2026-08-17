@@ -270,9 +270,9 @@ export function Board({ rows }: { rows: BoardRow[] }) {
 
   return (
     <div className="board">
-      {/* No title here. The masthead already says "Draft board" six lines up,
+      {/* No title here. The page head already says "Draft board" six lines up,
           and saying it twice was the loudest thing on the screen. What is left
-          is the part the masthead does not cover: how to operate this. */}
+          is the part the page head does not cover: how to operate this. */}
       <div className="board-head">
         <span className="board-sub">
           every {STAT_SEASON} week, scored in league terms
