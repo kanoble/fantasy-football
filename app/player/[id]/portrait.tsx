@@ -52,7 +52,14 @@ export function Portrait({ src, name }: { src: string | null; name: string }) {
         height={SIZE}
         // One width and one quality across the app, so each player costs a
         // single Vercel cache key — see the note in next.config.ts.
-        quality={80}
+        //
+        // 75 because that is the only quality on the allowlist, and asking for
+        // 80 was a no-op that logged a warning on every player page: Next
+        // silently serves "the closest allowed value", so these portraits have
+        // always been 75. Widening the allowlist to gain five points of JPEG
+        // quality on a 96px square would double the cache keys per player for
+        // nothing visible.
+        quality={75}
         sizes={`${SIZE}px`}
       />
     </span>

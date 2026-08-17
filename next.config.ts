@@ -37,7 +37,18 @@ const nextConfig: NextConfig = {
     // rather than one per breakpoint. The portrait is a fixed 96px square in
     // the page head; 192 is that at 2x for retina and nothing renders larger.
     imageSizes: [96, 192],
-    // 31 days. These are studio portraits that change once a year at most.
+    // Declared rather than left to default, because "one quality" is the whole
+    // argument above and a default is not a constraint. A second entry here
+    // doubles the cache keys per player, and therefore the transformations.
+    // Next serves the closest allowed value when a component asks for something
+    // else, so a mismatch is silent apart from a build-time warning.
+    qualities: [75],
+    // 31 days, and this is what makes the arithmetic above true rather than
+    // optimistic. Transformations are billed per cache MISS *and STALE*, so the
+    // TTL is what decides whether a second view of the same player costs
+    // anything: at 31 days it cannot go stale inside a billing month, so the
+    // ceiling really is "distinct players opened", not "page views". These are
+    // studio portraits that change once a year at most.
     minimumCacheTTL: 2_678_400,
   },
 };

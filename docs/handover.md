@@ -10,28 +10,40 @@ Repo: https://github.com/kanoble/fantasy-football (public)
 
 ## Start here: which branch you are on
 
-**The working tree is on `draft-cost`, not `main`, and that is deliberate.**
-PR #7 is open and carries the draft-cost pass plus this document. `main` is at
-`7f27c21` and has none of it — including none of this handover, so if you are
-reading an older version of this file, `git checkout draft-cost`.
-
-This cost a confusion worth not repeating. The commits were made on `main`
-locally, then moved to a branch with `git branch draft-cost && git reset --hard
-origin/main` — which is the documented working shape for this repo, and which
-also silently reverted the working tree. **The dev server on port 3000 reads the
-working tree**, so it went on serving the old UI and the new column looked like
-it had never been built. If a change you just made is not on screen, check
-`git branch --show-current` before you check anything else.
+**The working tree is on `player-legibility`, not `main`.** PR #7 merged, so
+`main` is at `c475c40` and has the whole draft-cost pass; what it does not have
+is the legibility pass or this version of the handover.
 
 Immediate state:
 
 | | |
 |---|---|
-| Branch | `draft-cost`, pushed, **PR #7 open** |
-| `main` | `7f27c21`, untouched |
-| Migration `0009` | **Applied to the live database.** Nothing to run. |
+| Branch | `player-legibility`, **PR #8** |
+| `main` | `c475c40` — PR #7 merged 2026-08-17 |
+| Migrations | `0001`–`0009` all applied. **Nothing to run.** |
 | Checks | `tsc`, `next build`, 62 pytest, `ruff` — all clean |
-| Unreviewed | Kevin has not yet looked at the cost column |
+| Open decision | The amber median measures 4.32:1 in light. See "Open questions" |
+
+**Two ways this repo has now hidden a change from the dev server. Both look
+identical on screen — a page that is a mixture of old and new — and both waste
+the session that hits them.**
+
+1. **The wrong branch.** The commits for draft-cost were made on `main` locally
+   and then moved with `git branch draft-cost && git reset --hard origin/main`,
+   which is the documented working shape here and which also silently reverted
+   the working tree. The dev server reads the working tree, so it served the old
+   UI and the new column looked like it had never been built.
+
+2. **`next build` run against a live `next dev`.** They share `.next`. The
+   production build clobbers the dev server's chunks on disk while it goes on
+   serving stale modules from memory, so you get *some* new components and some
+   old ones in one render — new `page.tsx`, old `career.tsx`, and none of the new
+   CSS, which is precisely what Kevin was shown in this session.
+
+So: **if a change you just made is not on screen, check
+`git branch --show-current` first, and whether you have run a build under the
+dev server second.** The cure for the second is `rm -rf .next` and restart
+`npm run dev` — and the habit worth keeping is not running the two together.
 
 ---
 
@@ -75,10 +87,18 @@ database also gained a decade of historical draft prices, backfilled once from
 Fantasy Football Calculator, which makes "was he worth his ADP" answerable for
 the first time. See "The player depth pass, as built".
 
-**The player depth pass is merged (PR #6).** What is new since is the draft-cost
-pass: the career table now says what a season *cost* beside what it returned,
-which is the feature `adp_history` was backfilled for and the first thing to
-read that table. See "Draft cost, as built".
+**The player depth pass and the draft-cost pass are both merged (PRs #6 and
+#7).** The career table says what a season *cost* beside what it returned, which
+is the feature `adp_history` was backfilled for. See "Draft cost, as built".
+
+**What is new since is the legibility pass, on a branch as PR #8.** Kevin read
+`/player/[id]` as a reader rather than as its author — he showed it to a relative
+and they could not read parts of it — and the page turned out to be fluent only
+in its own vocabulary. Every column and stat label now explains itself, a week is
+readable anywhere along a plot rather than on a 5px target, the cost-versus-finish
+subtraction has a column, and the faint text is legible. It also found two
+defects nobody had seen: two CSS rules that had never applied, and a hydration
+failure on every player page. See "The legibility pass, as built".
 
 **This machine now has a browser**, for the first time in the project's life.
 That closes the gap every previous handover ended on — see "The machine has a
@@ -187,8 +207,9 @@ Verified live on 2026-08-16.
 | `player_cards()` / `player_seasons()` | Working. Same verification: member gets rows, non-member and email-less get zero, `anon` is refused. |
 | `position_context()` | Working. Same verification. 252ms warm over REST against 171ms for `player_cards()`. |
 | `adp_history` table | **Backfilled, 2,936 rows, 2012–2026.** Read-only to members; INSERT/UPDATE/DELETE all 403. **Now read by the UI** — see "Draft cost, as built". |
-| `draft_value()` | **Written, tested under rollback, NOT applied.** Migration `0009`. The one outstanding step before `draft-cost` can merge. |
-| **Player bio and portraits** | **Built, on `player-bio`.** 8,940 of 10,145 players have a headshot; 1,190 of 1,259 current skill players. |
+| `draft_value()` | **Working and merged.** Migration `0009`, applied. Read by the Cost and Delta columns. |
+| **Player bio and portraits** | **Built and merged (PR #6).** 8,940 of 10,145 players have a headshot; 1,190 of 1,259 current skill players. |
+| **Column definitions and the plot's hover** | **Built, on `player-legibility` (PR #8).** Every career column and stat label explains itself; a week is readable anywhere along a plot. See "The legibility pass, as built". |
 | `data_freshness()` | Working. Powers the dateline on all four screens. |
 | **The app bar and the brand** | **Built and merged.** Crest, wordmark, section tabs, avatar menu, dateline. Markup verified server-side; visuals confirmed by Kevin locally, not on production. |
 | **`drafted` table + write policies** | **Working, and the first write path.** Verified with HS256 JWTs across member, non-member, email-less and `anon`. |
@@ -485,12 +506,22 @@ polyfill is what is actually shipping.
 
 ### Still owed on design
 
-- **`/player` and `/compare` have the new chrome but not a new interior.** The
-  header pass gave all four screens the same app bar, page head and dateline, so
-  the *hierarchy above the fold* is now decided and consistent. What was never
-  decided is what sits below it: the eight-figure stat strip on `/player` and the
-  metric table on `/compare` are the board's tokens applied to layouts nobody
-  designed. That is the oldest outstanding design debt.
+- **`/player/[id]`'s interior has had a legibility pass, not a design pass.**
+  The stat strip is ten tiles rather than eight, every label and column head now
+  explains itself, and the faint text is legible — see "The legibility pass, as
+  built". What has *not* happened is anybody deciding what that strip should
+  look like: it is still the board's tokens in a flex row, now with two more
+  things in it. The pass fixed what was wrong and did not decide what is right.
+- **`/compare`'s interior is untouched and is now the older debt of the two.**
+  Its metric table is twelve rows of the board's tokens in a layout nobody
+  designed, and the cost row added in `0009` made it longer. It has none of the
+  column definitions the career table just gained, which is the cheapest thing
+  to carry across — `Tip` is a server component and `/compare` is server-rendered.
+- **The board's column heads still explain nothing.** Deliberately out of scope:
+  they are already `.sortbtn` buttons and a button cannot nest in a button, so
+  they need a different trigger. `.r-head` there is also `--faint`, i.e. 1.96:1,
+  and raising it changes two screens Kevin has approved. Worth doing, worth
+  asking first.
 - **The mobile view is still nothing.** A 62rem grid does not survive a phone,
   and this is three screens that do not, not one. The app bar wraps rather than
   collapsing — a slim bar with a crest is the easiest thing here to make work on
@@ -502,6 +533,13 @@ polyfill is what is actually shipping.
   defect that three sessions of reading the source had not. What it still
   cannot do is hold a session, so it renders components with fixture data
   rather than driving the real signed-in app.
+
+  **Its second outing found three more things**, which is the argument for
+  reaching for it early rather than at the end: two CSS rules that had never
+  applied, a hydration failure on every player page, and a horizontal scrollbar
+  the fix for the first two had just introduced. None of the three was visible in
+  a diff. Read the console as well as the pixels — the hydration failure was
+  announced there and nowhere else.
 
 ### Still open on the UI
 
@@ -728,14 +766,20 @@ threshold that might quietly attach the wrong man.
 
 ### Draft cost, as built
 
-**Built 2026-08-16, on `draft-cost`. Migration `0009` is written and tested but
-NOT applied** — see "State as of the end of the 2026-08-16 draft-cost session".
+**Built 2026-08-16, merged 2026-08-17 as PR #7. Migration `0009` is applied.**
 
 The career table could say where a season finished among startable players at a
 position and could not say where it *started*. Every rank on the page was a
 result with no price beside it, which is half of the only question a drafter is
 asking. `draft_value()` in `0009` supplies the other half, and `/player/[id]`
-gains a **Cost** column immediately left of **Rank**.
+gains a **Cost** column immediately left of **Rank** — and, since the legibility
+pass, a **Delta** immediately right of it.
+
+**One caveat on everything below about how Cost *looks*: it did not look like
+that.** `.cost` and `.rank` both lost to `.num` on source order, so the dimming
+described in the table was never on screen until the legibility pass fixed the
+specificity. The reasoning stands; the rendering did not exist. See "The
+legibility pass, as built".
 
 It reads as a career in two columns. St. Brown: WR63→WR22, WR30→WR7, WR8→WR3,
 WR3→WR3, WR7→WR3 — a player who has beaten his price every year he has played.
@@ -749,7 +793,7 @@ RB4→RB1 in two he did not. Neither of those was answerable before.
 | **No verdict is drawn from the pair** | No green, no arrow, no delta column. A back returning RB6 on an RB2 price had a fine season, and the same refusal is already in the IQR column and the compare page's rank row. The subtraction is one glance away for anyone who wants it. |
 | **Position comes from whoever priced him** | `position_context()` takes position from the weeks, because it describes what a player *did*; this takes FFC's label, because it describes what the market *bought*. They differ on **8 of 1,818 pairs, 0.4%** — 2025's only case is Travis Hunter, drafted WR33 and playing corner, and `WR33 / CB1` describes that season better than either label alone. |
 | **`PK` folds to `K`** | FFC spells kickers `PK`. Unfolded, all 184 of them read as position disagreements and each is ranked in a pool of one. That fold is where the 0.4% above comes from not being 10%. |
-| **Cost is dimmed against Rank** | The columns run cost-first because that is the order the season happened in, but the row should still read result-first. `--muted` against `.rank`'s `--ink` does that without a second colour. |
+| **Cost is set back from Rank** | The columns run cost-first because that is the order the season happened in, but the row should still read result-first. Originally `--muted` against `.rank`'s `--ink`; **now weight, not colour**, because `--muted` measured 3.81:1 the moment it first actually rendered. |
 | **An empty cell is an em dash** | He was not worth drafting that year, or the season predates the data. Same treatment as every other honest absence on the screen. |
 
 It also lands on `/compare` as a **`2025 draft cost`** row directly above the
@@ -763,10 +807,117 @@ have a price and nothing to compare it against. They render as ordinary rows
 with no cost, because the career table only lists seasons a player actually
 played. Coverage inside the window is ~99% of matched ADP rows.
 
-**`.career .grid` is `66rem` where `.grid` is `62rem`.** The extra column needs
-its width, and `.grid` is shared with the board and the pickers, which have no
-cost column. Raising the shared value would have made the board scroll earlier
-for nothing.
+**`.career .grid` is `70.25rem` where `.grid` is `62rem`** — 66rem for the cost
+column, and 4.25rem more for the delta column that followed it. The extra
+columns need their width, and `.grid` is shared with the board and the pickers,
+which have neither. Raising the shared value would have made the board scroll
+earlier for nothing. The career panel now starts scrolling internally just under
+1280px, which is inside the desktop-only scope.
+
+### The legibility pass, as built
+
+**Built 2026-08-17, on `player-legibility` as PR #8.** Five things Kevin asked
+for after reading the page as a *reader* rather than as its author — he had shown
+it to a relative and the two of them could not read parts of it. Everything here
+is on `/player/[id]`, which makes this the first instalment of the oldest
+outstanding design debt: see "Still owed on design".
+
+The through-line is that the page had become fluent in its own vocabulary. It
+said `G`, `IQR`, `20+`, `Middle 50%` and `Floor weeks` without ever saying what
+any of them were, on the theory that a column head explains itself — which it
+does, to whoever built it.
+
+| Decision | Why |
+|---|---|
+| **The median tile keeps its amber and gives up its size** | It was `1.6rem` against its neighbours' `1.05rem` *and* amber. Amber already means "median" on every screen here, so the colour carried the meaning and the size only broke the strip's rhythm — while making the largest figure on a page whose subject is a person's name. `.stat.big` is `.stat.accent` now, and it sets colour only. |
+| **The whole plot track is the hover target, and the nearest dot answers** | A dot is 5px across, 7px for a ceiling week, and carried its score in a `title`. That failed twice over: the target was smaller than a pointer's own wobble, so a reader could be over a season and still be over nothing; and the browser's tooltip delay is about a second and **cannot be shortened**. Now there is no position inside a season that reads as empty. |
+| **A ring marks the dot being read** | A tooltip that names a week without pointing at one asks to be trusted. It also disambiguates overlapping dots, which is ordinary — two weeks four pixels apart. |
+| **Definitions are a `<button>`, not a `title`** | Shipping `title` on the headers would have re-introduced the exact latency the dots just lost. A button gets hover, keyboard focus *and* tap, so it works on a phone and in a screen reader, and none of it needs JavaScript — which is what lets `Tip` stay a server component. |
+| **The hint lives inside the button, not behind `aria-describedby`** | It becomes part of the button's accessible name — verified as `"Season Regular seasons he played, newest first…"` — and needs no generated id, which would have meant `useId` and therefore a client component. |
+| **Every cell of the career head is a tip, `Season` included** | `.tip` is brighter than the `--faint` header around it, both because `--faint` is 1.96:1 and because that brightness *is* the affordance. Leaving one cell out would have made the row two weights for no reason. |
+| **A Delta column, and it overrides a decision from `0009`** | The cost/rank pair was left with the subtraction "one glance away". Over a ten-season career that is ten subtractions. Kevin asked for something scannable and was right. |
+| **The delta still gets no verdict** | One colour, no arrow, sign always shown. `Cost - Rank`, so positive means he beat his price. A back who returned RB6 on an RB2 price had a good season that red would call a failure — the same refusal as the IQR column and the compare page's rank row. |
+| **The two pools stay different sizes, and the delta says so in words** | Cost is out of players *drafted* at that position, rank out of everyone who *played* there. McCaffrey's 2024 reads `-67` and part of that 67 is the larger pool. An honest direction and a soft distance: both denominators travel in the cell's title and the header says it outright. |
+| **The bio line moves to the text face** | "USC · 112th overall in 2021 · 82 career games" is words you read, not figures you compare — the same argument the header pass used for the section tabs. 0.66rem mono caps with letter-spacing was the least legible combination on the page and it was carrying the one line made of proper nouns. |
+
+**The median delta is a median for the reason the whole app prefers one.**
+McCaffrey's nine deltas are `-67, -53, -37, 0, 0, +2, +2, +3, +8`. The median is
+**`0`** — he has, in the middle case, met his price exactly, which is the honest
+summary of a career with two RB1 finishes and three seasons lost to injury. The
+mean is `-15.6` and would read as a bust. St. Brown's read `+41, +23, +5, 0, +4`
+for a median of `+5`.
+
+**Two defects were found by measuring, and neither was on the list.**
+
+1. **`.cost` and `.rank` had never rendered.** Both are `class="num cost"` /
+   `class="num rank"`, and `.num` sets `color: var(--dim)` several hundred lines
+   further down `globals.css`. At one class each the rules tied on specificity
+   and lost on source order — so the "the price is dimmed against the result"
+   weighting this document devotes a table row to was in the source and never on
+   screen. Both cells were `--dim`, identically. **It shipped that way in
+   `0009`, and Kevin was asked to judge the weighting on a screen that was not
+   showing it.** Written `.num.cost` / `.num.rank` now, which wins wherever the
+   rules end up.
+
+   The board's `.rank` was a *second, unrelated meaning of the same class name* —
+   the draft-order ordinal — and being later in the file it silently won. It is
+   `.ord` now. Renamed rather than reordered, because a reorder puts the
+   collision one edit away from coming back.
+
+   And once the intended colour reached the screen it turned out to be **3.81:1**,
+   under the floor. So the step from cost to rank is weight now, not colour.
+
+2. **Hidden tooltips gave the document a horizontal scrollbar.** `opacity: 0`
+   hides a box without removing it: it still generates a box, still lays out, and
+   still counts toward scrollable overflow. Two stat-strip hints hung past the
+   right edge and pushed `documentElement.scrollWidth` to 1146px against a
+   1024px viewport — quietly undoing a property a previous session had measured
+   at thirteen widths and recorded as true. They collapse to `transform:
+   scale(0)` while hidden, with `transform-origin` pinned to whichever edge the
+   box hangs off, because scrollable overflow is computed from the *transformed*
+   box. `display: none` would also have worked and would have taken the hint out
+   of the accessibility tree with it, which is where the button gets its name.
+
+**Measured, both themes, before this was called done:** contrast on every label
+and cell; thirteen viewport widths with `scrollWidth` equal to the viewport at
+each; every tooltip inside its clipping panel; a 41-point sweep of one plot with
+a reading at every position; 20 tip triggers reachable by Tab with the box at
+full opacity; and a clean browser console.
+
+**`pct` moved from `app/plot.tsx` to `lib/board.ts`.** Two things need it now —
+the plot that places the dots and the hover layer that works out which one a
+pointer is nearest — and a second copy of the scale arithmetic is exactly how a
+fixed axis stops being fixed. Same reason the plot was extracted from the board.
+
+**`app/plot.tsx` still has no `"use client"`, and that is why `PlotHover` is a
+separate file.** The plot renders in the board's client tree *and* in the
+server-rendered compare page; it can only keep doing both if the state lives in a
+child. Props are plain number arrays, so they cross the boundary unchanged.
+
+**The board and `/compare` got the hover layer too**, because it is the shared
+component. That is 923 rows on the board; the handler is one linear scan over at
+most 17 points and bails out when the answer has not changed, so React re-renders
+one plot per pointer move rather than a row.
+
+### The season arc's tooltips were empty, and the page was failing hydration
+
+Found by opening a browser and reading the console — the first thing the browser
+has caught that was not a colour.
+
+`<title>season median {median.toFixed(1)}</title>` reads as one string and is
+**two children**. React takes the children of a `<title>` as a single string and
+drops anything else, so every tooltip on the arc rendered `<title></title>` into
+the server HTML. The client then built the correct titles, the two disagreed, and
+**hydration failed on every player page** — which is every player page, because
+the newest season starts expanded. React threw the server tree away and rebuilt
+it, which is where the working tooltips came from and why nothing looked wrong.
+
+React warns about exactly this case and names the fix, a template string. It
+warns **on the server console**, which is why two sessions never saw it.
+
+The general lesson is worth more than the fix: **an interpolated `<title>` is
+silently discarded.** `<title>{`a ${b}`}</title>` is fine; `<title>a {b}</title>`
+is not. Both look identical in review.
 
 ### The machine has a browser now
 
@@ -1187,6 +1338,12 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **The cost/rank pair gets no verdict** | Same refusal as the IQR column and the compare page's rank row: earlier is not better, it is the number the result answers. |
 | **Composition labels are measured, not judged** | The bar's labels failed in both themes for two sessions while being described as a light-mode risk. See "The composition bar was wrong in both themes". |
 | **The palette is swept by hue, not sampled** | Anything keyed on `--tm` is only as correct as its worst of thirty-two hues, and Detroit's blue is not a representative sample of one that also holds Pittsburgh's gold. |
+| **4.5:1 is a floor for text, and it outranks a dimming** | Twice now a deliberate "set this back" has turned out to mean "put this under the legibility floor" — `--faint` on the bio line at 1.96:1, `--muted` on the cost column at 3.81:1. Where the two conflict, the hierarchy moves to weight or size and the colour comes up. |
+| **Definitions are a custom tooltip, never `title`** | The native delay is ~1s, is not adjustable, and never fires on a phone. `app/tip.tsx` is CSS-only so it stays a server component; row *cells* still use `title` for supplementary detail, which is a different job from explaining a column. |
+| **The cost/rank delta is a column, but still not a verdict** | Reversed the "one glance away" half of `0009` because ten seasons is ten subtractions; kept the no-colour half, for the reason the IQR column has always had. See "The legibility pass, as built". |
+| **`pct` lives in `lib/board.ts`** | The plot draws with it and the hover layer reads with it. Two copies of the scale arithmetic is how a fixed axis stops being fixed. |
+| **A cell styled on top of `.num` needs two classes** | `.num` sets a colour late in `globals.css` and beats any one-class rule regardless of intent. `.num.cost`, `.num.rank`, `.num.delta`. See "The legibility pass, as built". |
+| **One image quality, declared not defaulted** | `qualities: [75]` in `next.config.ts`. A second entry doubles the cache keys per player and therefore the transformations. Next silently serves the closest allowed value, so a mismatch costs nothing but a warning — which is what `quality={80}` had been doing. |
 
 ## Open questions
 
@@ -1235,22 +1392,37 @@ before trusting it. `MANUAL_OVERRIDE` exists as the escape hatch.
 **Q9. What is the 2026 NFL game key?** 461 = 2025; 2026 unverified. Resolve at
 runtime via `/game/nfl` rather than hardcoding.
 
+**Q10. Does `--amber` want darkening in light mode? Kevin's call, unanswered.**
+The median figure on `/player/[id]` measures **4.32:1** on the light ground,
+against the 4.5:1 its size needs. It is not a regression so much as a threshold
+crossing: at `1.6rem` it counted as WCAG *large text* and needed only 3:1, and
+matching it to its neighbours moved it into the stricter band. `#a06a10` →
+roughly `#9a6510` fixes it at 4.65:1 and is imperceptible.
+
+**It was not done unilaterally because `--amber` is shared** — the median marker
+on every plot, the crest's bar, the focus rings, the open chevron — and Kevin
+approved that palette in the design pass. The dark-mode amber is 9.60:1 and wants
+nothing. Everything else on the page measures 7:1 or better in both themes, so
+this is the single outstanding contrast number in the app.
+
 ## Next steps, in the order I would do them
 
-PRs #1–#6 are merged. **The draft-cost pass is on `draft-cost`.**
+PRs #1–#7 are merged. **The legibility pass is on `player-legibility` as PR #8.**
 
 **The draft is 30 August. That is the deadline everything below is ranked
-against**, and as of this handover it is fourteen days away.
+against**, and as of this handover it is thirteen days away.
 
-0. **Kevin looks at the cost column, then PR #7 merges.** Migration `0009` is
-   already applied, so merging is the only step left and the database needs
-   nothing. Check out `draft-cost` before starting the dev server or the screen
-   will not have it — see "Start here".
+0. **Kevin reviews PR #8, then it merges.** No migration, no database step. He
+   has already seen the pass locally and approved it; what he has not answered is
+   **Q10**, the amber, which is a one-line palette change either way and does not
+   block the merge.
 
-   The thing worth his eye rather than the machine's: whether **Cost dimmed
-   against Rank** is the right weighting. The machine can prove both are
-   legible and cannot judge whether the row still reads result-first, which is
-   the whole intent of the dimming.
+   Two things in it were his judgement rather than the machine's and both now
+   have a real answer on screen for the first time: whether **the cost, rank and
+   delta run reads result-first**, and whether **an uncoloured signed number is
+   scannable enough** to do the job he asked the Delta column for. If the second
+   turns out to be no, colour is the obvious lever and the reason it was withheld
+   is in "The legibility pass, as built" rather than in a rule that cannot bend.
 
 1. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
    one, clear the board. The feature has never met the thing it is for, and this
@@ -1285,11 +1457,18 @@ against**, and as of this handover it is fourteen days away.
    The app bar is the easy half; the board is the hard half and probably wants
    its own layout rather than a reflow — see "Still owed on design".
 
-4. **The `/player` and `/compare` interiors**, which is the oldest outstanding
-   design debt now that their chrome is settled. Lower stakes than the three
-   above: those screens are consistent and not broken. The cost column is one
-   more reason to look at `/compare`'s metric table, which is now eleven rows
-   of the board's tokens in a layout nobody designed.
+4. **`/compare`'s interior**, which is now the older debt of the two — the
+   legibility pass took `/player/[id]`'s worst problems and left its layout
+   undecided, and did not touch `/compare` at all. Lower stakes than the three
+   above: the screen is consistent and not broken. Twelve rows of the board's
+   tokens in a layout nobody designed, and the cost row from `0009` made it
+   longer.
+
+   **Start with the cheap half: carry `Tip` across.** `app/tip.tsx` is CSS-only
+   and a server component, `/compare` is server-rendered, and its row labels —
+   "Middle 50%", "Floor · 25th pct", "2025 draft cost" — are exactly the
+   vocabulary the career table just learned to explain. That is an hour, and it
+   is separable from deciding what the screen should look like.
 
 5. **The rest of what `adp_history` can answer.** The per-player half is built
    (see "Draft cost, as built"); the cross-player half is not. "What has a pick
@@ -1350,6 +1529,47 @@ Note the working shape this settled into: the work is committed to `main`
 locally, then moved onto a branch when a PR is wanted. Committing is cheap and
 local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
+
+## State as of the end of the 2026-08-17 legibility session
+
+- **PR #7 merged (`c475c40`). The legibility pass is on `player-legibility` as
+  PR #8**, three commits: the arc's hydration fix, the pass itself, and the image
+  quality fix plus this handover.
+- **No migration.** Nothing was asked of the database this session; `0001`–`0009`
+  are all applied and there is nothing outstanding.
+- **All five of Kevin's items are built**: the median tile matched to its row, a
+  hover that reads a week anywhere along a plot, definitions on every career
+  column and stat label, a Delta column with a median delta in the strip, and the
+  bio line legible. See "The legibility pass, as built".
+- **Two pre-existing defects were found with the browser and fixed.** `.cost` and
+  `.rank` had never rendered their intended colours — Kevin had been asked, in
+  the previous handover, to judge a weighting that was not on screen. And every
+  player page was **failing hydration** because the arc's SVG `<title>`s were
+  interpolated and therefore empty in the server HTML.
+- **One defect was introduced and caught in the same session**: the hidden
+  tooltips gave the document a horizontal scrollbar, at 1146px against a 1024px
+  viewport, undoing a property a previous session had measured at thirteen widths.
+- **Measured rather than judged, both themes**: contrast on eleven elements,
+  thirteen viewport widths, tooltip containment inside the clipping panels, a
+  41-point sweep of a plot, and 20 tip triggers reached by Tab. The only failing
+  number left in the app is the amber median at 4.32:1 in light — **Q10, and
+  Kevin's call**, because `--amber` is shared and he approved that palette.
+- **The pixel-clustering contrast method has a failure mode, now documented.** It
+  takes the darkest 8% of an element's pixels as "the glyphs", which on a
+  block-level span whose text covers 3% of its area is still mostly background —
+  it under-read every element in the first run, reporting 4.49:1 for something
+  that is 7.13:1. Use it for the composition bar, where `opacity` under a blend
+  mode makes computed style useless; use specified colours for plain text.
+- **The image quality warning is fixed and the caching question is answered** —
+  `quality={80}` was a no-op Next silently served as 75. Re-opening a player page
+  costs no transformation; see "Things that will bite you".
+- `tsc`, `next build`, 62 Python tests and `ruff` all clean.
+- **The throwaway probe under `app/auth/` was deleted**, twice — it was rebuilt
+  once to verify the stale-dev-server recovery rather than asking Kevin to test
+  it again.
+- **A `next dev` server is running on port 3000**, restarted cold after `.next`
+  was cleared. See the two failure modes under "Start here".
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-16 draft-cost session
 
@@ -1532,6 +1752,37 @@ step that ships.
   disappearing from the dateline rather than by showing something false, which
   is the right failure but also the one nobody notices.
 
+- **Do not run `next build` while `next dev` is live.** They share `.next`. The
+  build clobbers the dev server's chunks on disk while it keeps serving stale
+  modules from memory, and the result is a page assembled from both — new
+  components beside old ones and none of the new CSS. It looks exactly like a
+  code bug and it is not one. This was shown to Kevin in this session as a
+  "broken" screen. `rm -rf .next` and restart dev to recover.
+
+- **An interpolated SVG `<title>` renders empty and fails hydration.**
+  `<title>week {n}</title>` is two children; React takes the children of a
+  `<title>` as one string and **drops anything else**, so the server emits
+  `<title></title>`, the client builds the real thing, and the mismatch throws the
+  whole page tree away and rebuilds it. Use a template string:
+  `` <title>{`week ${n}`}</title> ``. React warns, on the *server* console, which
+  is why this survived two sessions. See "The season arc's tooltips were empty".
+
+- **`opacity: 0` does not remove a box from scrollable overflow.** It still lays
+  out and still counts, so a hidden absolutely-positioned tooltip that hangs past
+  a container's edge gives the *document* a horizontal scrollbar. `transform:
+  scale(0)` with `transform-origin` on the anchored edge does remove it, because
+  overflow is computed from the transformed box — and unlike `display: none` it
+  keeps the element in the accessibility tree. See "The legibility pass".
+
+- **`.num` beats a one-class rule that came before it, whatever the comment
+  says.** `.num` sets `color: var(--dim)` late in `globals.css`; `.cost` and
+  `.rank` set theirs earlier, tied on specificity and lost on source order, so
+  the career table's intended weighting was in the source and never on screen
+  for the entire life of `0009`. Style a cell on top of `.num` with two classes
+  — `.num.cost` — not one. And **check for a class-name collision before adding
+  a rule**: `.rank` meant two unrelated things on two screens, which is how the
+  later one silently won. The board's is `.ord` now.
+
 - **A `"use client"` module's exports are client references, even the strings.**
   `THEME_SCRIPT` imported into `layout.tsx` from the client component arrived as
   a proxy, and `dangerouslySetInnerHTML` rendered nothing — no error, no warning,
@@ -1612,6 +1863,22 @@ step that ships.
   player page and would be spent in five refreshes by one portrait per board
   row. **Headshots belong on `/player/[id]` and nowhere else** — the reasoning
   is in `next.config.ts`, and moving them is the change that breaks the budget.
+
+  **Checked against the docs on 2026-08-17, because Kevin asked whether
+  re-opening a player page costs a second transformation. It does not.**
+  Transformations are billed per cache **MISS and STALE**, so `minimumCacheTTL`
+  is what decides the answer, and at 31 days an entry cannot go stale inside a
+  billing month. The ceiling really is "distinct players opened", not page views.
+
+  Two things that reading pays for. First, **there are three metered dimensions,
+  not one**: 5K transformations, 300K cache *reads* and 100K cache *writes* per
+  month on Hobby. Writes are billed on the same MISS/STALE events as
+  transformations, so they cannot run ahead of them; reads are only charged when
+  an image comes from the shared global cache rather than in-region, so they are
+  the one number a lot of traffic could move. Twelve relatives will not.
+  Second, **overrun still fails soft** — new images 402 and render their `alt`,
+  cached ones keep working, and Hobby is never charged.
+  https://vercel.com/docs/image-optimization/limits-and-pricing
 
 - **`adp_history` is the second table that cannot be rebuilt from upstream.**
   `injury_news` was the first. Everything else in the schema is a cache the cron
