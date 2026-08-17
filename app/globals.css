@@ -424,16 +424,38 @@ code {
   display: block;
 }
 
-/* Where he came from, set one step back from what he is now: fixed for life
-   and read once, against a line that changes every season. */
+/* What he is now: terse tokens — RB · DET · #0 · age 24 · 4th season — so this
+   keeps `.ctx`'s mono caps, which is the right register for a data line.
+
+   `--dim` rather than the inherited `--muted`, which measured 3.81:1 on the
+   light ground against the 4.5:1 this size needs. Kevin could not read this
+   block with a relative next to him, and both lines were part of why. */
+.bio-now {
+  color: var(--dim);
+  font-size: 0.7rem;
+}
+
+/* Where he came from: "Alabama · 12th overall in 2023 · 41 career games".
+
+   Set in the text face rather than the mono one, and not uppercased, because
+   these are words you read and not figures you compare — the same argument the
+   header pass used for the section tabs. A college name in 0.66rem mono caps
+   with letter-spacing is the least legible combination on the page, and it was
+   carrying the one line on it made of proper nouns.
+
+   `--faint` was the real defect: 1.96:1 against the light ground and 2.49:1
+   against the dark, where 4.5:1 is the floor for text this size. It was
+   chosen as a step back from `--muted` on the reasoning that this line is read
+   once — which is true, and does not license making it unreadable. `--dim` is
+   7.1:1 light and 7.7:1 dark, and the step back is now carried by size and by
+   the line above being uppercase. */
 .bio-then {
-  margin-top: 0.2rem;
-  /* --faint rather than an opacity on --muted: the palette already encodes
-     this step and it is tuned separately for the two grounds, which an opacity
-     multiplier cannot be. */
-  color: var(--faint);
+  margin-top: 0.25rem;
+  color: var(--dim);
+  font-family: var(--body);
+  font-size: var(--step--1);
   text-transform: none;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.005em;
 }
 
 /* ---------------------------------------------------------------------------
@@ -805,12 +827,16 @@ code {
   min-width: 62rem;
 }
 
-/* The career table carries one column the board does not — the draft cost — so
-   it needs that column's width on top before the plot starts being squeezed.
-   Scoped to `.career` rather than raised on `.grid`, which the board and the
-   pickers share and which has no cost column to make room for. */
+/* The career table carries two columns the board does not — the draft cost and
+   the gap between it and the finish — so it needs their width on top before the
+   plot starts being squeezed. Scoped to `.career` rather than raised on
+   `.grid`, which the board and the pickers share and which has neither column
+   to make room for.
+
+   66rem before the delta column; the extra 4.25rem is that column plus its gap,
+   so the plot keeps exactly the width it had. */
 .career .grid {
-  min-width: 66rem;
+  min-width: 70.25rem;
 }
 
 /* stripe | rank | player | adp | median | iqr | 20+ | plot | chevron
@@ -926,33 +952,80 @@ code {
 }
 
 /* season | rank | G | total | median | iqr | 20+ | best | plot | chevron */
-/* season | cost | rank | G | total | median | IQR | 20+ | best | plot | chev */
+/* season | cost | rank | delta | G | total | median | IQR | 20+ | best | plot | chev */
 .r-season {
-  grid-template-columns: 5rem 4rem 4rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+  grid-template-columns: 5rem 4rem 4rem 3.5rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
 }
 
-/* The price, beside the result it was a guess at. Dimmed against `.rank`
-   because the two are not equals — one is what happened, the other is what the
-   market thought would happen — and the row should read result-first even
-   though the columns run cost-first. */
-.cost {
-  color: var(--muted);
-  font-weight: 500;
+/* THE THREE RULES BELOW ARE WRITTEN AS `.num.x`, AND THAT IS NOT STYLE.
+
+   Every cell they describe is `class="num cost"` or `class="num rank"`, and
+   `.num` sets `color: var(--dim)` several hundred lines further down this file.
+   At one class each these rules tied with it on specificity and lost on source
+   order — so Cost and Rank both rendered `--dim`, identically, and the whole
+   "the price is dimmed against the result" weighting below was in the source and
+   never on screen. It shipped that way in `0009` and was found with a browser,
+   by measuring the two cells and getting the same colour twice.
+
+   Two classes each beats `.num` wherever either rule ends up, which is what
+   makes this a fix rather than a reshuffle. Any new cell styled on top of
+   `.num` needs the same treatment. */
+
+/* The price, beside the result it was a guess at. Set back from `.rank` because
+   the two are not equals — one is what happened, the other is what the market
+   thought would happen — and the row should read result-first even though the
+   columns run cost-first.
+
+   The step is weight against `.rank`'s 600, not colour. It was `--muted`, which
+   measured 3.81:1 on the light ground against the 4.5:1 this size needs — and
+   the moment the specificity fix above put that colour on screen for the first
+   time, "dimmed" turned out to mean "under the legibility floor". Weight
+   carries the same hierarchy at 7.13:1, and the column order helps: cost, rank,
+   delta reads dim, ink, dim, so the answer is the bright one and the price and
+   the arithmetic sit either side of it. */
+.num.cost {
+  color: var(--dim);
+  font-weight: 400;
 }
 
 /* Position rank. Set in ink rather than dimmed like the counts beside it: it
    is the one figure on the row that says whether the median next to it was
    any good, which is the question the whole column exists to answer. */
-.rank {
+.num.rank {
   color: var(--ink);
   font-weight: 600;
 }
 
 /* A season outside the startable pool. Dimmed rather than flagged — finishing
-   RB41 is an ordinary thing that happens to most careers, not an alarm. */
-.rank.out {
+   RB41 is an ordinary thing that happens to most careers, not an alarm.
+
+   This one was the only survivor of the collision above — two classes already —
+   which produced the exact inversion of the intent: a bad season was visibly
+   dimmed while a good one looked like the counts beside it. */
+.num.rank.out {
   color: var(--faint);
   font-weight: 400;
+}
+
+/* Cost minus Rank, in one colour.
+
+   Set between the two it subtracts — `--muted` for the price, `--ink` for the
+   result, `--dim` for the gap — so it reads as derived from the pair rather
+   than as a third independent figure.
+
+   NO COLOUR ON THE SIGN, and this is the load-bearing line in this rule. A
+   green `+5` and a red `-67` is the verdict the cost/rank pair has refused
+   since `0009`, for the reason the IQR column refuses one too: a back who
+   returned RB6 on an RB2 price had a good season that red would call a
+   failure. The sign is the signal, and tabular figures line the signs up down
+   the column, which is what makes it scannable without a hue.
+
+   `.num.delta` for the specificity reason above: `--dim` happens to be what
+   `.num` gives it anyway, so a one-class rule would look like it worked. It
+   would stop working the moment either colour moved. */
+.num.delta {
+  color: var(--dim);
+  font-weight: 500;
 }
 
 /* player | median | iqr | plot */
@@ -988,6 +1061,119 @@ code {
 
 .r-head .num {
   text-align: right;
+}
+
+/* a column label that says what it means ------------------------------- */
+
+/* The trigger. A `<button>` rather than a `title` for three reasons: the native
+   tooltip's ~1s delay is not adjustable and is the same defect this pass removed
+   from the plot's dots; a button gets keyboard focus and a tap, so this works
+   on a phone and in a screen reader; and none of it needs JavaScript, so the
+   career table, the compare page and the stat strip stay server-rendered.
+
+   `--dim` rather than the `--faint` of the header row around it, and that is
+   not decoration. `--faint` measures 1.96:1 on the light ground — a label at
+   0.55rem that a reader has to squint at is not improved by being explainable.
+   It also *is* the affordance: the columns that can tell you something are the
+   slightly brighter ones. Every cell in the career head is a tip for that
+   reason, `Season` included, so the row stays one weight rather than two. */
+.tip {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 0.3em;
+}
+
+.tip:hover {
+  color: var(--ink);
+}
+
+.tip:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* Set in the text face and sentence case: the label is a token to compare, the
+   definition is prose to read. Absolutely positioned, which is also what stops
+   the trigger's dotted underline propagating into it — text decoration does not
+   reach an out-of-flow descendant.
+
+   Opacity rather than `display: none`, so the hint stays in the accessibility
+   tree and forms part of the button's accessible name. */
+.tipbox {
+  position: absolute;
+  z-index: 8;
+  top: calc(100% + 0.55rem);
+  width: 15rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--panel);
+  color: var(--dim);
+  border: 1px solid var(--firm);
+  border-radius: 3px;
+  box-shadow: 0 6px 20px var(--shadow);
+  font-family: var(--body);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.005em;
+  text-transform: none;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  /* COLLAPSED TO NOTHING WHILE HIDDEN, AND THAT IS LOAD-BEARING.
+
+     `opacity: 0` hides a box but does not remove it: it still generates a box,
+     still takes part in layout, and still counts toward its ancestors'
+     scrollable overflow. On the stat strip — which is not inside a scrolling
+     panel — two of these boxes hung past the right edge and gave the *document*
+     a horizontal scrollbar, measured at 1146px against a 1024px viewport. A
+     previous session measured this page at thirteen widths and recorded that it
+     never scrolled sideways; that would have quietly stopped being true.
+
+     Scrollable overflow is computed from the *transformed* box, so scaling to
+     zero removes the contribution entirely. `display: none` would do it too and
+     would take the hint out of the accessibility tree with it, which is where
+     the button gets its name from. The origin is pinned to whichever edge the
+     box hangs off, so the collapsed point stays on screen rather than
+     collapsing to a centre that was itself out of view. */
+  transform: scale(0);
+}
+
+/* Which edge the box hangs from. Not cosmetic: the panels clip on both axes, so
+   a box that overhangs one is cut off and can add a scrollbar. */
+.tip-left .tipbox {
+  left: 0;
+  transform-origin: left top;
+}
+
+.tip-right .tipbox {
+  right: 0;
+  transform-origin: right top;
+}
+
+/* Fast on purpose. The whole complaint about the native tooltip was the wait.
+   Only the opacity transitions — the box comes to full size at once, because
+   at zero opacity its size is not something anybody can see. */
+.tip:hover .tipbox,
+.tip:focus-visible .tipbox {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tipbox {
+    transition: none;
+  }
 }
 
 /* sortable headers ---------------------------------------------------- */
@@ -1160,7 +1346,12 @@ code {
   border-radius: 1px;
 }
 
-.rank {
+/* The board's draft-order ordinal — "1", "2", "3" down the left of the board.
+   Was `.rank`, which collided with the career table's *positional* rank two
+   screens away: same word, two unrelated meanings, and this rule is later in
+   the file, so it silently won. Renamed rather than reordered, because the
+   collision would come straight back the next time either rule moved. */
+.ord {
   font-family: var(--mono);
   font-size: 0.62rem;
   color: var(--faint);
@@ -1336,6 +1527,66 @@ code {
   top: 50%;
   transform: translateY(-50%);
   white-space: nowrap;
+}
+
+/* reading a week off the plot ------------------------------------------ */
+
+/* The whole track is the target.
+
+   A dot is 5px across and carried its score in a `title`, which failed twice
+   over: the target was smaller than a pointer's own wobble, so a reader could
+   be over a season and still be over nothing, and the browser's tooltip delay
+   is about a second and cannot be shortened. Now there is nowhere inside a
+   season that reads as empty, and the nearest dot answers.
+
+   Above the dots so it receives the pointer, below the tooltip it opens. It
+   takes the `.field` band's old `title` with it — that band is named in the
+   panel subtitle instead, which is a better place for it than a tooltip on a
+   region nobody knew was hoverable. */
+.hit {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+/* Which dot is being read. A tooltip that names a week without pointing at one
+   asks to be trusted; this is the confirmation the `title` never gave. Ring
+   rather than fill, so the dot's own state — full-strength ceiling, hollow
+   floor — is still visible through it. */
+.ping {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  margin-top: -6.5px;
+  margin-left: -6.5px;
+  border-radius: 50%;
+  border: 1px solid var(--tm, var(--tm-none));
+  pointer-events: none;
+}
+
+/* Narrow, nowrap and centred on the dot, which is what keeps it inside the
+   panel without any clamping arithmetic: `.board` and `.career` are
+   `overflow-x: auto`, so they clip on both axes, and "wk 12 · 55.4" is about
+   4rem wide against the 3.9rem of chevron column and padding to the right of
+   the plot. Widen this and it will need clamping. */
+.dotbox {
+  position: absolute;
+  bottom: calc(100% + 0.3rem);
+  transform: translateX(-50%);
+  z-index: 9;
+  padding: 0.16rem 0.4rem;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--firm);
+  border-radius: 3px;
+  box-shadow: 0 4px 12px var(--shadow);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* The season settles into the channel, left to right, so the first thing the
@@ -2244,9 +2495,13 @@ table.log td.z {
    /player/[id] — the header strip above the career table
    =========================================================================== */
 
-/* The eight numbers a drafter actually asks for, on the page rather than one
+/* The ten numbers a drafter actually asks for, on the page rather than one
    click into it. Wraps rather than scrolls: this is the summary, and a summary
-   that needs scrolling has stopped being one. */
+   that needs scrolling has stopped being one.
+
+   Every label is a `.tip`, so the vocabulary this app invented — "middle 50%",
+   "floor weeks", "median delta" — says what it means to somebody meeting it for
+   the first time. */
 .stats {
   display: flex;
   flex-wrap: wrap;
@@ -2272,8 +2527,12 @@ table.log td.z {
   color: var(--ink);
 }
 
-.stat.big dd {
-  font-size: 1.6rem;
+/* The median. Amber and nothing else — this was `.big`, at 1.6rem against its
+   neighbours' 1.05rem, and the size was the largest figure on a page whose
+   subject is a name. Amber already means "median" on every screen in this app,
+   so the colour was carrying the meaning and the size was only breaking the
+   strip's rhythm. */
+.stat.accent dd {
   color: var(--amber);
 }
 

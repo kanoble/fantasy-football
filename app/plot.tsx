@@ -1,4 +1,5 @@
-import { AXIS_MAX, CEILING, FLOOR } from "@/lib/board";
+import { AXIS_MAX, CEILING, FLOOR, pct } from "@/lib/board";
+import { PlotHover } from "./plot-hover";
 
 /**
  * The distribution plot, and the ruler underneath it.
@@ -14,10 +15,6 @@ import { AXIS_MAX, CEILING, FLOOR } from "@/lib/board";
 
 export const GRIDLINES = [10, 20, 30, 40, 50];
 export const AXIS_MARKS = [0, ...GRIDLINES, AXIS_MAX];
-
-/** A score as a percentage across the fixed axis, clamped so nothing escapes
- *  the track. 56 clears the largest score in the published set. */
-export const pct = (value: number) => Math.max(0, Math.min(100, (value / AXIS_MAX) * 100));
 
 export function Plot({
   points,
@@ -99,13 +96,13 @@ export function Plot({
                 // and reads as the distribution settling into the track.
                 animationDelay: `${((pct(value) / 100) * 0.28).toFixed(3)}s`,
               }}
-              title={
-                weeks?.[index] != null
-                  ? `week ${weeks[index]} · ${value.toFixed(1)}`
-                  : value.toFixed(1)
-              }
             />
           ))}
+          {/* Last, so it sits over the dots it is reading. A dot carries no
+              `title` of its own any more: a 5px target and a one-second browser
+              delay meant the score was often unreachable, which is the whole
+              reason this layer exists. */}
+          <PlotHover points={points} weeks={weeks} />
         </>
       ) : (
         <span className="none">{empty ?? "no games"}</span>

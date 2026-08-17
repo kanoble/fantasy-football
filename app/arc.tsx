@@ -194,7 +194,14 @@ export function Arc({
             y1={y(median)}
             y2={y(median)}
           >
-            <title>season median {median.toFixed(1)}</title>
+            {/* One template string, not `median {value}`. React takes the
+                children of a <title> as a single string and drops anything
+                else, so the interpolated form rendered `<title></title>` into
+                the server HTML — every tooltip on this chart was empty, and the
+                mismatch against the client failed hydration and regenerated the
+                whole page tree. React warns about it, on the server console,
+                which is why it went unseen. See the one below too. */}
+            <title>{`season median ${median.toFixed(1)}`}</title>
           </line>
         ) : null}
 
@@ -227,9 +234,7 @@ export function Arc({
             cy={y(point.points)}
             r={point.points >= CEILING ? 4.2 : 3.4}
           >
-            <title>
-              week {point.week} · {point.points.toFixed(1)}
-            </title>
+            <title>{`week ${point.week} · ${point.points.toFixed(1)}`}</title>
           </circle>
         ))}
       </svg>

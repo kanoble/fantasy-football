@@ -41,6 +41,58 @@ export const CEILING = 20;
 export const FLOOR = 10;
 
 /**
+ * A score as a percentage across the fixed axis, clamped so nothing escapes
+ * the track.
+ *
+ * Here rather than in `app/plot.tsx` because two things now need it: the plot
+ * that draws the dots, and the hover layer that has to work out which dot a
+ * pointer is nearest. A second copy of this arithmetic is exactly how a fixed
+ * scale quietly stops being fixed — the same reason the plot was extracted
+ * from the board in the first place.
+ */
+export const pct = (value: number) => Math.max(0, Math.min(100, (value / AXIS_MAX) * 100));
+
+/**
+ * The middle value, or the mean of the two middle ones.
+ *
+ * The app's own argument, applied to itself: a career's cost-versus-finish
+ * deltas are a distribution with outliers — two injury seasons drag a mean
+ * somewhere the career never was — and the same reasoning that puts a median
+ * on every row of the board puts one on the summary above it.
+ *
+ * Copies before sorting: the caller's array is usually `points` or a mapped
+ * projection of a query result, and sorting it in place would silently reorder
+ * a season's weeks.
+ */
+export function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length / 2;
+  return sorted.length % 2 === 1
+    ? sorted[Math.floor(mid)]!
+    : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+/**
+ * A delta with its sign always shown: `+5`, `-67`, `0`.
+ *
+ * The sign is the whole signal — it is what makes the column scannable — so it
+ * is never implicit, and a plus is not a decoration that can be dropped when
+ * the number is positive. Set in the mono face with tabular figures, so the
+ * signs line up down the column and the eye can run past them.
+ *
+ * Whole numbers stay whole: a per-season delta is a difference of two ranks and
+ * always is one. Only the median of an even number of seasons lands on a half,
+ * and that is the one case worth a decimal.
+ */
+export function signedDelta(value: number): string {
+  const shown = Number.isInteger(value) ? String(Math.abs(value)) : Math.abs(value).toFixed(1);
+  if (value > 0) return `+${shown}`;
+  if (value < 0) return `-${shown}`;
+  return "0";
+}
+
+/**
  * How many players `/compare` will put side by side.
  *
  * Three, because the plots share one axis and a fourth column pushes the shared
