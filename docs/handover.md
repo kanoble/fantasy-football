@@ -8,13 +8,54 @@ Repo: https://github.com/kanoble/fantasy-football (public)
 
 ---
 
-## Start here: which branch you are on
+## Start here: the next session builds the value chart
+
+**PR #9 is merged and nothing is on a branch.** The tree is on `main`, clean.
+This session mocked a new screen, Kevin chose a direction, and **the plan is
+written and committed but no code for it exists.**
+
+**Read [value-chart.md](value-chart.md) before writing any of it.** It holds the
+maths, the migration, the route, and the five questions Kevin has not answered.
+Two of the decisions in it were found by building the mock and would not survive
+being re-derived from scratch.
+
+Immediate state:
+
+| | |
+|---|---|
+| Branch | `main`, clean, **not pushed** |
+| `main` | PR #9 merged 2026-08-17 |
+| Migrations | `0001`–`0009` all applied. **`0010` is planned and not written.** |
+| Checks | `tsc`, `next build`, 62 pytest, `ruff` — all clean |
+| Open decisions | **Five, all Kevin's, all listed in value-chart.md.** Do not treat them as settled by silence. |
+
+**Two ways this repo has now hidden a change from the dev server. Both look
+identical on screen — a page that is a mixture of old and new — and both waste
+the session that hits them.**
+
+1. **The wrong branch.** The commits for draft-cost were made on `main` locally
+   and then moved with `git branch draft-cost && git reset --hard origin/main`,
+   which is the documented working shape here and which also silently reverted
+   the working tree. The dev server reads the working tree, so it served the old
+   UI and the new column looked like it had never been built.
+
+2. **`next build` run against a live `next dev`.** They share `.next`. The
+   production build clobbers the dev server's chunks on disk while it goes on
+   serving stale modules from memory, so you get *some* new components and some
+   old ones in one render.
+
+So: **if a change you just made is not on screen, check
+`git branch --show-current` first, and whether you have run a build under the
+dev server second.** The cure for the second is `rm -rf .next` and restart
+`npm run dev`.
+
+<!-- superseded, kept for the shape of the failure -->
+<details>
+<summary>The previous session's branch note</summary>
 
 **The working tree is on `compare-interior`, not `main`.** PR #8 merged, so
 `main` is at `e9434d4` and has the whole legibility pass; what it does not have
 is the compare pass or this version of the handover.
-
-Immediate state:
 
 | | |
 |---|---|
@@ -23,6 +64,8 @@ Immediate state:
 | Migrations | `0001`–`0009` all applied. **Nothing to run.** |
 | Checks | `tsc`, `next build`, 62 pytest, `ruff` — all clean |
 | Open decisions | None blocking. **Q10 is answered — the amber stays.** See "Open questions" |
+
+</details>
 
 **Two ways this repo has now hidden a change from the dev server. Both look
 identical on screen — a page that is a mixture of old and new — and both waste
@@ -98,12 +141,21 @@ subtraction has a column, and the faint text is legible. It also found two
 defects nobody had seen: two CSS rules that had never applied, and a hydration
 failure on every player page. See "The legibility pass, as built".
 
-**What is new since is the compare pass, on a branch as PR #9.** `/compare` was
-the oldest outstanding design debt in the app — twelve rows of the board's tokens
-in a layout nobody had decided, explaining none of its own vocabulary. It now has
-a decided layout, a definition on every row, the three figures it was missing,
-and a portrait per player that costs nothing. See "The compare pass, as built".
-**With it, every screen in the app has had a design pass.**
+**The compare pass is merged (PR #9).** `/compare` was the oldest outstanding
+design debt in the app — twelve rows of the board's tokens in a layout nobody had
+decided, explaining none of its own vocabulary. It now has a decided layout, a
+definition on every row, the three figures it was missing, and a portrait per
+player that costs nothing. See "The compare pass, as built". **With it, every
+screen in the app has had a design pass.**
+
+**What is new since is a screen that does not exist yet.** Three scatter-plot
+directions were mocked against live rows, Kevin chose one, and the build plan is
+written: **[value-chart.md](value-chart.md)**. It answers the question the board
+can only imply — who is priced below what he returns — by putting the *residual*
+on the vertical axis, so the market's expectation is a flat zero line and a
+bargain is at the top of the chart rather than being a diagonal you eyeball.
+**It is the first screen in this app that draws a verdict**, which is a rule
+change and is recorded as one. See "The value chart, planned".
 
 **This machine now has a browser**, for the first time in the project's life.
 That closes the gap every previous handover ended on — see "The machine has a
@@ -999,6 +1051,52 @@ this screen: **`align` describes which edge the box is anchored to, not which wa
 the label's text is set**, and the two point in opposite directions whenever the
 label is on the left of the layout.
 
+### The value chart, planned
+
+**Mocked and chosen 2026-08-17. No code exists.** The plan is
+[value-chart.md](value-chart.md) and it is the thing to read before building —
+everything below is the summary, not the specification.
+
+Published mockup, live data, all three directions —
+https://claude.ai/code/artifact/8560c9cc-a229-46e9-a96f-8932ae7e8b63
+
+A scatter: cost on the horizontal, and on the vertical what a player returned
+**above or below what his price usually buys**. Kevin's own framing for why it is
+worth building — *"if I see someone with low cost and high median, that's a juicy
+candidate for my next draft pick"* — is a diagonal on an ordinary scatter and a
+height on this one.
+
+| Decision | Why |
+|---|---|
+| **Direction C, the residual** | Of three mocked, this is the one that shows the judgment rather than making the reader infer it. Kevin's call, and he named the trade-off himself: it is more valuable and it means the maths has to be right. |
+| **It draws a verdict, and that is a rule change** | Every other screen refuses one — no colour on the cost/rank pair, no winner on the IQR row, no crown on the delta. Right for a table cell reporting one fact, wrong for an instrument whose job is to rank value. The career table will go on refusing one route away; that inconsistency is accepted, not overlooked. |
+| **The expectation is per position, always** | Fitted across the whole market, the three biggest bargains came back Mahomes, Stafford and Brissett — a quarterback outscores a receiver every week of his life, so the residual was mostly reporting position. Exactly what `position_context()` exists to prevent, arriving through a different door. **Found by looking at the mock, not by reasoning.** |
+| **The baseline and the scale are computed before the draft scope** | The players already taken are by definition the good ones: recompute the expectation from whoever is left and it sinks with every pick, so a player's residual improves while he sits there doing nothing. Same for the vertical domain, for the reason `/compare`'s gauges run absolute scales. **The scope removes dots and moves nothing** — verified by walking the draft to six positions and diffing every dot's coordinates. |
+| **A moving median, not a least-squares fit** | Median of the 13 nearest players at that position. A fit is dragged by exactly the injury seasons a drafter is discounting. |
+| **The cost axis is logarithmic, cost rising rightward** | Linear ADP puts picks 1–24 in 8% of the width — `/compare` found this and dropped its ADP gauge over it. Rightward is Kevin's original instinct, confirmed after seeing both. |
+| **No team hue anywhere on it** | 32 categories of noise on a scatter. `/compare` already settled that position identifies a player and hue is decoration. **This is the first UI pass that needs no hue sweep.** |
+| **`--good`/`--bad` are legal here only because the sign is redundant** | Measured: ΔE **8.1** deutan in light, **7.8** in dark — the floor, passable only with a second encoding. There is one, the side of the zero line. **If those hues ever go somewhere position does not also state the sign, re-measure first.** |
+| **A separate function, not a wider `draft_board()`** | Postgres cannot change a return type with `CREATE OR REPLACE`, so widening means `DROP` — and dropping a function drops its grants. Doing that to the function the whole board depends on, for a column the board does not yet show, is risk with no return. It also runs in parallel rather than in series: 183ms and 409ms become a wall clock of about 230ms. |
+
+**The career median delta is cheap and its coverage is the real caveat.**
+Measured against the live database, best of three: `draft_board()` is **183ms**
+today and **409ms** with the delta joined in SQL. But a delta needs a past price
+*and* a scored season, so it exists for **299 of 1,050 board rows — and 153 of
+the 179 inside the first 192 picks.** It is a top-of-the-draft statistic, 85%
+present where it matters and mostly absent where it does not.
+
+**Two thirds of the board cannot be plotted at all** and they include some of the
+priciest picks. `draft_board()` coalesces its counts to zero, which is right in a
+table cell and a lie on an axis — a rookie drawn at zero asserts he scored
+nothing rather than that he had no season. They get a rail beside the plot naming
+them and which kind each is.
+
+**The largest gap this leaves is the same one the depth pass left.** There is
+still no JS test runner — `npm run lint` is `tsc --noEmit` — and the residual
+arithmetic is the most consequential untested code this app would have. The plan
+calls for `node --test`, which ships with Node and needs no dependency. It has
+been deferred three times defensibly; this one would not be.
+
 ### Two figures were wrong in a published mockup
 
 Recorded because the failure is a specific one and it will recur. The mockups
@@ -1467,6 +1565,12 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **`/compare`'s result is split from its page** | `page.tsx` authenticates and fetches; `result.tsx` is pure presentation, so a throwaway probe can render it with real rows and no session. That split is what made the pass's measurements possible at all. |
 | **The amber is not darkened** | Q10, answered 2026-08-17: Kevin's call, and he chose to leave it. The median figure measures 4.32:1 in light against a 4.5:1 floor, and `--amber` is shared across four things he approved in the design pass. |
 | **One image quality, declared not defaulted** | `qualities: [75]` in `next.config.ts`. A second entry doubles the cache keys per player and therefore the transformations. Next silently serves the closest allowed value, so a mismatch costs nothing but a warning — which is what `quality={80}` had been doing. |
+| **The value chart draws a verdict; every other screen still refuses to** | Deliberate and Kevin's call. A table cell reporting one fact should not editorialise; an instrument whose only job is to rank value has to. See "The value chart, planned". |
+| **A residual is always computed within position** | Across the whole market it mostly reports that quarterbacks outscore receivers. The same mistake `0008` exists to prevent, reached by a different route, and it was caught by looking at a mock rather than by reasoning. |
+| **A baseline and a scale are computed before any scope is applied** | The drafted players are the good ones, so refitting on the survivors lifts everyone left for free; a refitting axis moves dots when no season changed. The scope removes marks and moves nothing, and there is a check that proves it. |
+| **The value chart carries no team hue, and needs no hue sweep** | The first UI pass in this app that reads no `--tm`. Colour there is the residual's sign, which the geometry already states. |
+| **`--good`/`--bad` are at the CVD floor and need a second encoding** | Measured ΔE 8.1 deutan in light, 7.8 in dark. They have only ever been used on text with words attached, so this had never mattered; on a chart where hue could be the lone signal it does. |
+| **The career median delta gets its own function, not a wider `draft_board()`** | A return-type change means `DROP`, and dropping a function drops its grants. It also parallelises instead of serialising. See "The value chart, planned". |
 
 ## Open questions
 
@@ -1535,15 +1639,23 @@ eleven elements of the compare pass, is 7:1 or better in both themes.
 
 ## Next steps, in the order I would do them
 
-PRs #1–#8 are merged. **The compare pass is on `compare-interior` as PR #9.**
+PRs #1–#9 are merged. Nothing is on a branch.
 
 **The draft is 30 August. That is the deadline everything below is ranked
 against**, and as of this handover it is thirteen days away.
 
-0. **Kevin reviews PR #9, then it merges.** No migration, no database step.
-   Every decision in it was taken with him — the layout, the variant, keeping
-   `Weeks ≤ 10`'s gauge, and the 0–450 domain — and it was measured before it was
-   called done. Nothing in it is pending his judgement.
+0. **Kevin runs a mock draft.** He said so himself, and he expects to come back
+   with changes to the value chart afterwards. Two things ride on it: the
+   drafted toggle meets the thing it is for (see item 1), and the five open
+   questions in [value-chart.md](value-chart.md) get answered by use rather than
+   by speculation.
+
+0b. **Build the value chart.** Plan written, direction chosen, no code. Start at
+   [value-chart.md](value-chart.md) — it holds the migration, the maths, the
+   route and the checks. Two of its decisions were found by building the mock and
+   will not survive being re-derived: the per-position expectation, and computing
+   the baseline before the scope. **This is buildable now and does not block on
+   the mock draft**, though shipping the verticals probably should.
 
 1. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
    one, clear the board. The feature has never met the thing it is for, and this
@@ -1658,6 +1770,36 @@ and therefore a token, which is a *new* secret in an app that currently holds
 exactly one; and the panel needs an admin notion, which `league_members` does not
 have yet — the same column P2 wants. Do P2 first and this gets cheaper.
 
+**P4. The composition bar belongs on `/compare` too.** Asked for 2026-08-17 while
+the charts were being mocked — the "where 366.9 points came from" bar, drawn for
+two or three players side by side. He described it as being on the draft page; it
+is `app/composition.tsx`, rendered by `app/game-log.tsx`, which both the board's
+expanded row and the player page use.
+
+**It is not free, unlike the three rows the compare pass added.**
+`Composition` takes `weeks: WeekRow[]` — the full 22 stat columns — because the
+bar's whole argument is that a score can be shown as arithmetic. Those come from
+`player_week_log(player_id, season)`, fetched on demand per season, and
+`fetchPlayers` (`lib/queries.ts`) currently fetches `player_cards()`,
+`player_seasons()`, `position_context()` and `draft_value()` — **none of which
+carries the stat columns.** So this is two or three more round trips, or a new
+set-wise function taking an id array the way the other four do. The latter is
+more in keeping; every other read on that page takes `ids[]`.
+
+**The harder half is colour, and it is the question `/compare` already answered
+once.** Every segment of the bar is the player's own team hue at a different
+opacity, deliberately, because colour on this app means team. `/compare` went the
+other way in PR #9 — position identifies a player, hue is decoration — precisely
+because Kevin could not derive meaning from the team colours quickly and two
+Lions were indistinguishable. Three bars side by side in three team hues
+re-opens exactly that. **Decide it before building, not after.**
+
+One more thing worth knowing: the bar's label contrast was hard-won — `opacity`
+on the segment faded the labels along with the fill, and the fix was measured to
+a worst case of 4.75:1 across sixteen hues. **Three bars in three cards is about
+a third of the width that was measured at, and the in-segment labels are what
+break first.** Re-run the hue sweep if it is re-laid-out narrower.
+
 Two items are gone from this list rather than done:
 
 - **The `.page-head` overflow** was measured at thirteen widths and does not
@@ -1708,6 +1850,48 @@ Note the working shape this settled into: the work is committed to `main`
 locally, then moved onto a branch when a PR is wanted. Committing is cheap and
 local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
+
+## State as of the end of the 2026-08-17 chart session
+
+- **PR #9 is merged (`6c33547`). Nothing is on a branch and nothing is pushed.**
+  This session wrote no application code at all: it mocked a screen, measured
+  what it would cost, and wrote the plan.
+- **No migration.** `0001`–`0009` are applied; **`0010_market_value.sql` is
+  planned and not written.** Nothing was asked of the database beyond reads.
+- **A new screen is designed and chosen.** Three scatter directions were mocked
+  against live rows and Kevin chose the residual. See "The value chart, planned"
+  and **[value-chart.md](value-chart.md)**, which is the specification.
+- **Kevin's question about median delta was answered by measurement, and my
+  first answer was wrong.** I said it would be a per-player fan-out; both halves
+  rank set-wise, so it is one extra pass. `draft_board()` 183ms → 409ms joined,
+  or about 230ms as a parallel RPC. **299 of 1,050 board rows get a delta, and
+  153 of the 179 inside the first 192 picks.**
+- **Three defects in the mock were caught by a browser and none was visible in
+  the source.** Twenty direct labels drove themselves into a stack that had left
+  the plot; the three biggest "bargains" came back as three quarterbacks because
+  the expectation was fitted across the whole market; and the hover ring, parked
+  off-canvas, rendered as a stray amber circle in the page margin.
+- **Two values were dishonest on an axis and are now null.** `draft_board()`
+  coalesces season total and ceiling weeks to zero, which is right in a table
+  cell and asserts that a rookie scored nothing when plotted.
+- **A property was verified rather than asserted:** walking the draft to 0, 12,
+  24, 48, 96 and 120 picks moves no dot and rescales no axis. That check is the
+  one to re-run whenever the residual maths is touched.
+- **`--good`/`--bad` were measured for colour-vision deficiency for the first
+  time** — ΔE 8.1 deutan light, 7.8 dark, the floor. Fine where they are used
+  today, because every use has words attached; a constraint from here on.
+- **Measured on the mock, both themes:** no stray mark outside any plot, 26 text
+  styles at or above 4.5:1 plus the tooltip's four at 7.37:1 or better, twelve
+  viewport widths from 1920 to 390 with no horizontal scroll, all 24 position ×
+  vertical combinations drawing non-empty, 19 focusable controls, clean console.
+- **Every figure in the published mock came out of the database via a build
+  script**, not typed — the compare mock's two mistyped figures are why.
+- **P4 is parked**: the composition bar on `/compare`, with what it actually
+  costs and the colour question it re-opens.
+- `tsc`, `next build`, 62 Python tests and `ruff` were not re-run — **no
+  application code changed this session.** The only changes are these two
+  documents.
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-17 compare session
 
@@ -1998,6 +2182,24 @@ step that ships.
   figures were wrong in a published mockup". Diffing the mock's own literals
   against the database takes a minute; copying numbers by hand feels too small a
   step to verify, which is exactly why it is not.
+
+- **Parking a mark off-canvas is not hiding it, when the SVG has
+  `overflow: visible`.** A plot needs that property so a label near an edge is
+  not cropped — and it is exactly what lets a hover ring parked at `(-99, -99)`
+  render as a stray amber circle out in the page margin, hundreds of pixels from
+  any chart. Hide with `opacity`, never by moving it out of the viewBox. Same
+  family as the entry below: off-screen and hidden are different things, and the
+  browser is the only place the difference shows.
+
+- **SVG collapses runs of whitespace, so a spaced-out label is not spaced out.**
+  `"◀  cheaper          ADP          dearer  ▶"` renders as a single run-on line.
+  Separate with real characters — middots — not with spaces.
+
+- **A label pushed off a crowded edge and then clamped ends up back on top of
+  its neighbour.** The clamp silently undoes the separation the push just made,
+  so two direct labels land on the same line and look like one string. Offer a
+  list of candidate offsets in both directions and take the first that is both in
+  bounds and clear, rather than pushing one way and clamping.
 
 - **`opacity: 0` does not remove a box from scrollable overflow.** It still lays
   out and still counts, so a hidden absolutely-positioned tooltip that hangs past
