@@ -10,19 +10,19 @@ Repo: https://github.com/kanoble/fantasy-football (public)
 
 ## Start here: which branch you are on
 
-**The working tree is on `player-legibility`, not `main`.** PR #7 merged, so
-`main` is at `c475c40` and has the whole draft-cost pass; what it does not have
-is the legibility pass or this version of the handover.
+**The working tree is on `compare-interior`, not `main`.** PR #8 merged, so
+`main` is at `e9434d4` and has the whole legibility pass; what it does not have
+is the compare pass or this version of the handover.
 
 Immediate state:
 
 | | |
 |---|---|
-| Branch | `player-legibility`, **PR #8** |
-| `main` | `c475c40` — PR #7 merged 2026-08-17 |
+| Branch | `compare-interior`, **PR #9** |
+| `main` | `e9434d4` — PR #8 merged 2026-08-17 |
 | Migrations | `0001`–`0009` all applied. **Nothing to run.** |
 | Checks | `tsc`, `next build`, 62 pytest, `ruff` — all clean |
-| Open decision | The amber median measures 4.32:1 in light. See "Open questions" |
+| Open decisions | None blocking. **Q10 is answered — the amber stays.** See "Open questions" |
 
 **Two ways this repo has now hidden a change from the dev server. Both look
 identical on screen — a page that is a mixture of old and new — and both waste
@@ -91,14 +91,19 @@ the first time. See "The player depth pass, as built".
 #7).** The career table says what a season *cost* beside what it returned, which
 is the feature `adp_history` was backfilled for. See "Draft cost, as built".
 
-**What is new since is the legibility pass, on a branch as PR #8.** Kevin read
-`/player/[id]` as a reader rather than as its author — he showed it to a relative
-and they could not read parts of it — and the page turned out to be fluent only
-in its own vocabulary. Every column and stat label now explains itself, a week is
+**The legibility pass is merged (PR #8).** `/player/[id]` was fluent only in its
+own vocabulary; every column and stat label now explains itself, a week is
 readable anywhere along a plot rather than on a 5px target, the cost-versus-finish
 subtraction has a column, and the faint text is legible. It also found two
 defects nobody had seen: two CSS rules that had never applied, and a hydration
 failure on every player page. See "The legibility pass, as built".
+
+**What is new since is the compare pass, on a branch as PR #9.** `/compare` was
+the oldest outstanding design debt in the app — twelve rows of the board's tokens
+in a layout nobody had decided, explaining none of its own vocabulary. It now has
+a decided layout, a definition on every row, the three figures it was missing,
+and a portrait per player that costs nothing. See "The compare pass, as built".
+**With it, every screen in the app has had a design pass.**
 
 **This machine now has a browser**, for the first time in the project's life.
 That closes the gap every previous handover ended on — see "The machine has a
@@ -209,7 +214,8 @@ Verified live on 2026-08-16.
 | `adp_history` table | **Backfilled, 2,936 rows, 2012–2026.** Read-only to members; INSERT/UPDATE/DELETE all 403. **Now read by the UI** — see "Draft cost, as built". |
 | `draft_value()` | **Working and merged.** Migration `0009`, applied. Read by the Cost and Delta columns. |
 | **Player bio and portraits** | **Built and merged (PR #6).** 8,940 of 10,145 players have a headshot; 1,190 of 1,259 current skill players. |
-| **Column definitions and the plot's hover** | **Built, on `player-legibility` (PR #8).** Every career column and stat label explains itself; a week is readable anywhere along a plot. See "The legibility pass, as built". |
+| **Column definitions and the plot's hover** | **Built and merged (PR #8).** Every career column and stat label explains itself; a week is readable anywhere along a plot. See "The legibility pass, as built". |
+| **`/compare`'s interior** | **Built, on `compare-interior` (PR #9).** A designed layout, a definition on every row, a 2025 delta, a median delta, a season total, and a portrait per player that costs no transformation. See "The compare pass, as built". |
 | `data_freshness()` | Working. Powers the dateline on all four screens. |
 | **The app bar and the brand** | **Built and merged.** Crest, wordmark, section tabs, avatar menu, dateline. Markup verified server-side; visuals confirmed by Kevin locally, not on production. |
 | **`drafted` table + write policies** | **Working, and the first write path.** Verified with HS256 JWTs across member, non-member, email-less and `anon`. |
@@ -512,16 +518,20 @@ polyfill is what is actually shipping.
   built". What has *not* happened is anybody deciding what that strip should
   look like: it is still the board's tokens in a flex row, now with two more
   things in it. The pass fixed what was wrong and did not decide what is right.
-- **`/compare`'s interior is untouched and is now the older debt of the two.**
-  Its metric table is twelve rows of the board's tokens in a layout nobody
-  designed, and the cost row added in `0009` made it longer. It has none of the
-  column definitions the career table just gained, which is the cheapest thing
-  to carry across — `Tip` is a server component and `/compare` is server-rendered.
+  **This is now the only interior on that footing**, and `/compare`'s cards are
+  the obvious thing to borrow from — the stat strip is the same problem the card
+  solved, a set of labelled figures with no decided shape.
+- **`/compare`'s interior is done** — see "The compare pass, as built". It is
+  the last screen that had never been designed, so this list no longer contains
+  one. What it left undone is stated there: the screen still shows a single
+  season while `/player/[id]` shows a career.
 - **The board's column heads still explain nothing.** Deliberately out of scope:
   they are already `.sortbtn` buttons and a button cannot nest in a button, so
   they need a different trigger. `.r-head` there is also `--faint`, i.e. 1.96:1,
   and raising it changes two screens Kevin has approved. Worth doing, worth
-  asking first.
+  asking first. **`.board-sub` is the same shape of problem** — `--muted` at
+  3.81:1 on all four screens. `/compare`'s own note was raised off that value in
+  PR #9; the shared one was left alone on purpose.
 - **The mobile view is still nothing.** A 62rem grid does not survive a phone,
   and this is three screens that do not, not one. The app bar wraps rather than
   collapsing — a slim bar with a crest is the easiest thing here to make work on
@@ -816,7 +826,7 @@ earlier for nothing. The career panel now starts scrolling internally just under
 
 ### The legibility pass, as built
 
-**Built 2026-08-17, on `player-legibility` as PR #8.** Five things Kevin asked
+**Built 2026-08-17, merged as PR #8.** Five things Kevin asked
 for after reading the page as a *reader* rather than as its author — he had shown
 it to a relative and the two of them could not read parts of it. Everything here
 is on `/player/[id]`, which makes this the first instalment of the oldest
@@ -898,6 +908,113 @@ child. Props are plain number arrays, so they cross the boundary unchanged.
 component. That is 923 rows on the board; the handler is one linear scan over at
 most 17 points and bails out when the answer has not changed, so React re-renders
 one plot per pointer move rather than a row.
+
+### The compare pass, as built
+
+**Built 2026-08-17, on `compare-interior` as PR #9.** This closes the oldest
+outstanding item under "Still owed on design": `/compare`'s interior had never
+been designed, only tokenised, and it had none of the column definitions the
+career table gained in PR #8. **Every screen in the app has now had a design
+pass.**
+
+Three directions were mocked against live `player_cards()`, `position_context()`
+and `draft_value()` rows for McCaffrey, St. Brown and Chase — a real decision at
+pick five — and Kevin took parts of all three. A second round synthesised them.
+
+Published mockups:
+
+- Three directions, both themes — https://claude.ai/code/artifact/f1645777-c87e-4d07-a4c8-2175fe2adee2
+- The synthesis, and the two variants of the mark — https://claude.ai/code/artifact/59a0b474-354b-4765-a64d-78a813e0e4f6
+
+**Chase was chosen for the mock deliberately**: his 2025 delta and median delta
+are both **−3**, so the mock could show whether an uncoloured signed number reads
+when it carries bad news. That was the one judgement PR #8 left open.
+
+| Decision | Why |
+|---|---|
+| **The stacked plots go at the top, at full width** | Kept from direction A. Three plots on one axis is the comparison; three small plots inside three cards is the same data made harder to compare, because the rows no longer line up. The cards therefore have no plot of their own — which is also what makes them short enough for three. |
+| **One card per player, one rail naming every row** | Kept from direction B. A card reads as a whole rather than as fourteen cells, and it survives a screenshot into a group chat, which with eleven relatives arriving is a real use. The rail exists because writing thirteen labels inside each of three cards is the same information three times. |
+| **Every gauge runs an absolute domain** | This is the whole repair to direction C, which Kevin rejected. Fitting a scale to the players on screen makes the best of three a full bar *whoever the three are*, so the mark says "best here" rather than "good" — and every bar moves the moment a player is added or dropped. The domains are constants in `lib/board.ts` beside the axis they extend. |
+| **Position identifies the player, never hue** | The other half of the same repair. Each gauge sits inside that player's own card under his own name, so `--tm` is decoration here exactly as it is on the board. Kevin's words were that he could not derive meaning quickly from the colours, and he was right: the first version needed a legend. It also means **two players from the same team are no longer indistinguishable** — St. Brown and Gibbs are both Lions and both inside the top eight, which is a real comparison. |
+| **Cost, rank, both deltas and the ADP carry no gauge** | The first four are ranks in differently sized pools; drawing them to a common length is exactly the verdict this screen has refused since `0009`. The ADP is different and was **dropped after seeing it drawn**: across the 192 picks of a 12-team draft every top-ten price is an invisible sliver, and the top ten is most of what this screen compares. |
+| **The middle 50% is a span, not a bar** | It is a spread, not a score. Drawn from q1 to q3 on the same 0–56 axis, so it reads as the width it is. |
+| **`Weeks ≤ 10` keeps its gauge** | The one row where a longer bar is a worse season. Raised with Kevin explicitly and he chose to keep it: the mark reports the quantity and draws no verdict, which is the rule everywhere else here. It is the one place on the screen a glance can mislead. |
+| **`Seasons played` is gone** | The weakest row on the old table, and the median delta lands above it saying more about the same span. How many seasons that median covers travels in the cell's `title`. |
+
+**The three added rows cost no query.** `fetchPlayers` has always returned every
+season of `position_context()` and `draft_value()` for each id, and the old screen
+filtered both down to the stat season and threw the rest away — so the career
+median delta is arithmetic that was already being done on `/player/[id]`, moved.
+The season total comes from `player_seasons()`, which the page also already
+fetched. **`player_cards()` has no total column**; summing the weekly `points`
+array reproduces it exactly (McCaffrey's seventeen 2025 weeks sum to 416.6, the
+stored figure) but there is no reason to reconstruct a number a query hands over.
+
+**Portraits are on the cards and cost nothing.** This is the one thing worth
+reading before touching `next.config.ts` again: **Vercel's image cache is keyed on
+the width *requested*, not the size *displayed*.** The cards ask for the same
+96px `/player/[id]` already asks for and scale it to 40px in CSS, so they share a
+cache entry the app was paying for either way — whichever screen is opened first
+pays, the other rides free for the 31 days of `minimumCacheTTL`. Asking for a
+40px image instead would have been a *new* key and a transformation per player.
+Verified in a browser rather than reasoned about: all three rendered from
+`?w=96&q=75`.
+
+That does not weaken the rule in `next.config.ts`. **The board and the pickers
+stay portrait-free** — at 923 and ~830 rows they are what breaks the budget, and
+`/compare` shows three.
+
+**`app/compare/result.tsx` exists so the screen can be looked at.** The page
+authenticates and fetches; the result is pure presentation over plain data, so a
+throwaway probe under `app/auth/` can render it with real rows and no session.
+`page.tsx` cannot be rendered that way because `getUser()` revalidates against
+the auth server. `toColumns()` is exported alongside it and both callers use it,
+because a fixture assembled differently from the real thing tests the fixture.
+**This split is what made every measurement below possible.**
+
+**`.mark` was already taken** — it is the board's drafted toggle. This is
+`.gauge`. That check took ten seconds and is the one the previous session learned
+to do the hard way, when `.rank` turned out to mean two unrelated things.
+
+**Measured on real rows through a browser, both themes, before this was called
+done:**
+
+- **All 27 gauge widths against the database**, zero mismatches — and the 15 rows
+  that must carry no gauge carry none.
+- **Contrast on eleven elements.** Two failed and were raised: `.cmp-meta` at
+  4.06:1 and `.vs-note` at 3.81:1, both now above 7:1.
+- **Thirteen viewport widths, 1920 down to 390.** `documentElement.scrollWidth`
+  equals the viewport at every one. Below about 700px the cards overflow inside
+  `.board`'s own scroller, which is the same behaviour the career panel has and
+  is inside the desktop-only scope.
+- **All 14 definitions hovered**: none escapes the viewport, none is clipped by
+  the panel. All 14 reachable by Tab with the box at full opacity.
+- **A clean browser console.**
+
+**One defect the browser caught that no diff would have.** The rail labels are
+right-aligned, so the tips were written `align="right"` — and the rail *is* the
+leftmost column, so anchoring a 17rem box to a label's right edge put it **96px
+off the left edge of the viewport** on all fourteen. The lesson generalises past
+this screen: **`align` describes which edge the box is anchored to, not which way
+the label's text is set**, and the two point in opposite directions whenever the
+label is on the left of the layout.
+
+### Two figures were wrong in a published mockup
+
+Recorded because the failure is a specific one and it will recur. The mockups
+said every figure was live data. Thirty-seven of thirty-nine were: the three
+players' numbers were hand-transcribed into the artifact's JavaScript from a
+JSON pull, and **Chase's middle 50% was typed 8.9–25.1 against a real 9.9–25.0,
+and his projection 313.6 against a real 311.1**.
+
+It was found by diffing the artifact's own literals against the database, which
+took a minute and should have happened before publishing rather than after.
+Neither number changed which direction Kevin chose, and the built page reads from
+the database so it was never affected. Both artifacts were corrected in place.
+
+**The general point: a mockup that claims live data has to be checked against the
+source the same way the app is.** Hand-copying numbers into a mock is exactly the
+kind of step that feels too small to verify.
 
 ### The season arc's tooltips were empty, and the page was failing hydration
 
@@ -1343,6 +1460,12 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **The cost/rank delta is a column, but still not a verdict** | Reversed the "one glance away" half of `0009` because ten seasons is ten subtractions; kept the no-colour half, for the reason the IQR column has always had. See "The legibility pass, as built". |
 | **`pct` lives in `lib/board.ts`** | The plot draws with it and the hover layer reads with it. Two copies of the scale arithmetic is how a fixed axis stops being fixed. |
 | **A cell styled on top of `.num` needs two classes** | `.num` sets a colour late in `globals.css` and beats any one-class rule regardless of intent. `.num.cost`, `.num.rank`, `.num.delta`. See "The legibility pass, as built". |
+| **A `/compare` gauge runs an absolute domain, never one fitted to the selection** | A scale drawn from the current three makes the best of them a full bar whoever they are, and moves every bar when a player is added. `AXIS_MAX`, `SEASON_GAMES` and `TOTAL_MAX` in `lib/board.ts`. See "The compare pass, as built". |
+| **Position identifies a player on `/compare`, not hue** | Each mark sits in that player's own card under his own name, so the team hue never has to be decoded and two players from the same team stay distinguishable. This replaced a version keyed on colour that Kevin could not read quickly. |
+| **A rank never gets a gauge** | Cost, position rank and both deltas are ranks in differently sized pools. Same refusal as the IQR column and the `0009` cost/rank pair. |
+| **The image cache is keyed on the width requested, not the size displayed** | `/compare`'s cards ask for the portrait's own 96px and scale it to 40px in CSS, so they share `/player/[id]`'s cache entry and cost no transformation. Asking for 40px would have been a new key per player. The board and the pickers still get no portraits at all. |
+| **`/compare`'s result is split from its page** | `page.tsx` authenticates and fetches; `result.tsx` is pure presentation, so a throwaway probe can render it with real rows and no session. That split is what made the pass's measurements possible at all. |
+| **The amber is not darkened** | Q10, answered 2026-08-17: Kevin's call, and he chose to leave it. The median figure measures 4.32:1 in light against a 4.5:1 floor, and `--amber` is shared across four things he approved in the design pass. |
 | **One image quality, declared not defaulted** | `qualities: [75]` in `next.config.ts`. A second entry doubles the cache keys per player and therefore the transformations. Next silently serves the closest allowed value, so a mismatch costs nothing but a warning — which is what `quality={80}` had been doing. |
 
 ## Open questions
@@ -1392,7 +1515,11 @@ before trusting it. `MANUAL_OVERRIDE` exists as the escape hatch.
 **Q9. What is the 2026 NFL game key?** 461 = 2025; 2026 unverified. Resolve at
 runtime via `/game/nfl` rather than hardcoding.
 
-**Q10. Does `--amber` want darkening in light mode? Kevin's call, unanswered.**
+**Q10. Does `--amber` want darkening in light mode? ANSWERED 2026-08-17: no.**
+Kevin's call, and he chose to leave it. The rest of this entry is kept because
+the measurement is still true and the next person to look at the amber should
+not have to re-derive it.
+
 The median figure on `/player/[id]` measures **4.32:1** on the light ground,
 against the 4.5:1 its size needs. It is not a regression so much as a threshold
 crossing: at `1.6rem` it counted as WCAG *large text* and needed only 3:1, and
@@ -1402,27 +1529,21 @@ roughly `#9a6510` fixes it at 4.65:1 and is imperceptible.
 **It was not done unilaterally because `--amber` is shared** — the median marker
 on every plot, the crest's bar, the focus rings, the open chevron — and Kevin
 approved that palette in the design pass. The dark-mode amber is 9.60:1 and wants
-nothing. Everything else on the page measures 7:1 or better in both themes, so
-this is the single outstanding contrast number in the app.
+nothing. **It remains the single failing contrast number in the app**, now
+deliberately rather than pendingly: everything measured since, including all
+eleven elements of the compare pass, is 7:1 or better in both themes.
 
 ## Next steps, in the order I would do them
 
-PRs #1–#7 are merged. **The legibility pass is on `player-legibility` as PR #8.**
+PRs #1–#8 are merged. **The compare pass is on `compare-interior` as PR #9.**
 
 **The draft is 30 August. That is the deadline everything below is ranked
 against**, and as of this handover it is thirteen days away.
 
-0. **Kevin reviews PR #8, then it merges.** No migration, no database step. He
-   has already seen the pass locally and approved it; what he has not answered is
-   **Q10**, the amber, which is a one-line palette change either way and does not
-   block the merge.
-
-   Two things in it were his judgement rather than the machine's and both now
-   have a real answer on screen for the first time: whether **the cost, rank and
-   delta run reads result-first**, and whether **an uncoloured signed number is
-   scannable enough** to do the job he asked the Delta column for. If the second
-   turns out to be no, colour is the obvious lever and the reason it was withheld
-   is in "The legibility pass, as built" rather than in a rule that cannot bend.
+0. **Kevin reviews PR #9, then it merges.** No migration, no database step.
+   Every decision in it was taken with him — the layout, the variant, keeping
+   `Weeks ≤ 10`'s gauge, and the 0–450 domain — and it was measured before it was
+   called done. Nothing in it is pending his judgement.
 
 1. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
    one, clear the board. The feature has never met the thing it is for, and this
@@ -1457,18 +1578,16 @@ against**, and as of this handover it is thirteen days away.
    The app bar is the easy half; the board is the hard half and probably wants
    its own layout rather than a reflow — see "Still owed on design".
 
-4. **`/compare`'s interior**, which is now the older debt of the two — the
-   legibility pass took `/player/[id]`'s worst problems and left its layout
-   undecided, and did not touch `/compare` at all. Lower stakes than the three
-   above: the screen is consistent and not broken. Twelve rows of the board's
-   tokens in a layout nobody designed, and the cost row from `0009` made it
-   longer.
+4. **`/player/[id]`'s stat strip**, which is now the last interior that has been
+   made legible without being designed. `/compare`'s cards solved the same
+   problem — a set of labelled figures with no decided shape — so this is
+   borrowing rather than starting. Lower stakes than the three above: the screen
+   is consistent and not broken.
 
-   **Start with the cheap half: carry `Tip` across.** `app/tip.tsx` is CSS-only
-   and a server component, `/compare` is server-rendered, and its row labels —
-   "Middle 50%", "Floor · 25th pct", "2025 draft cost" — are exactly the
-   vocabulary the career table just learned to explain. That is an hour, and it
-   is separable from deciding what the screen should look like.
+   Two things worth carrying across with it: the **gauge** (`app/compare/gauge.tsx`
+   is presentational and takes plain numbers) would let a stat tile say where a
+   figure sits rather than only what it is, and the **absolute domains** it reads
+   are already constants in `lib/board.ts`.
 
 5. **The rest of what `adp_history` can answer.** The per-player half is built
    (see "Draft cost, as built"); the cross-player half is not. "What has a pick
@@ -1478,6 +1597,66 @@ against**, and as of this handover it is thirteen days away.
 
 6. **In-season: run the Yahoo score diff** to close Q2 and Q3.
 7. **Then team defense** (Q4), once Q3 is settled.
+
+### Parked, asked for on 2026-08-17
+
+Three things Kevin named while the `/compare` pass was being built. None is
+started; each is recorded with what is already known about it, because the
+cheapest part of each is knowing where it actually lives.
+
+**P1. Show the signed-in user's Google profile photo, not their initial.**
+Cheaper than it looks: **this is not Google Cloud Project work.** Supabase already
+stores what the provider returned on the user object — `user_metadata.avatar_url`
+(Google also sends `picture`) — so the URL is in hand the moment sign-in
+succeeds and no new scope, consent-screen change or API call is needed. What the
+work actually is: thread it from the page through `AppBar` to `app/account.tsx`,
+which today takes `email` and nothing else, and decide how it fails. It must fail
+to the initial rather than to a broken image — a Google avatar URL can 404 once a
+photo is removed, and the crest's knockout initial is already the right fallback.
+Two smaller notes: the host is `lh3.googleusercontent.com`, so it needs a
+`remotePatterns` entry in `next.config.ts` before `next/image` will touch it, and
+it is a candidate for `unoptimized` — twelve small avatars already on Google's
+CDN are not worth a transformation each, and that keeps it entirely clear of the
+budget described under "Things that will bite you".
+
+**P2. Concurrent users during a live draft.** Kevin's instinct is that twelve
+people all driving one board is chaos, and it is right — the drafted toggle was
+built for a room, and every one of its verified paths was verified with **one**
+address on the allowlist. Nothing has ever exercised two writers. What exists
+today: any member can mark or unmark anything, marks are unattributed by design
+("No record of who took them"), and a 15s poll reconciles. The question is which
+of three shapes to take, and they cost very different amounts:
+
+  - **One writer, eleven readers.** A commissioner role gates INSERT/DELETE; the
+    board is identical for everyone else and simply not clickable. Cheapest —
+    a column on `league_members` and a policy — and it matches how a real draft
+    room already works, where one person calls the picks.
+  - **Everyone writes, but marks are attributed.** Adds `marked_by` and lets
+    only the marker undo their own. Keeps the room collaborative and makes a
+    mis-tap recoverable by the person who made it. Middle cost, and it partly
+    reverses the "one boolean fact" decision in "The draft-day toggle, as built".
+  - **A private board each, plus one official board.** The deepest segregation
+    and the most work: `drafted` gains an owner, every read becomes "mine or the
+    league's", and the screen needs to say which it is showing.
+
+  Worth settling before the eleven are added rather than after, because it
+  changes the table's key and its policies, and that is a migration either way.
+  Note also that the 15s poll was chosen over Realtime because Realtime could not
+  be verified with one browser — with twelve people that trade-off is worth
+  re-reading, and it is still `alter publication` away.
+
+**P3. An admin panel for system health against the platform limits.** Kevin wants
+to watch the ceilings before more people are behind the login, which is the right
+time to ask. The limits worth a panel are already documented in pieces across
+this file and are not one number: **Vercel Hobby** meters image transformations
+(5,000/mo), image cache reads (300K) and writes (100K), function invocations and
+duration; **Supabase free tier** caps database size at 500 MB (78 MB today) and
+meters egress, which is the one twelve readers could actually move. Two things to
+know before starting: the Supabase half is answerable in plain SQL from the
+database this app already talks to, while the Vercel half needs the platform API
+and therefore a token, which is a *new* secret in an app that currently holds
+exactly one; and the panel needs an admin notion, which `league_members` does not
+have yet — the same column P2 wants. Do P2 first and this gets cheaper.
 
 Two items are gone from this list rather than done:
 
@@ -1529,6 +1708,39 @@ Note the working shape this settled into: the work is committed to `main`
 locally, then moved onto a branch when a PR is wanted. Committing is cheap and
 local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
+
+## State as of the end of the 2026-08-17 compare session
+
+- **PR #8 merged (`e9434d4`). The compare pass is on `compare-interior` as
+  PR #9.** Its two post-merge production checks were run and passed: the cron
+  answers `401` with no redirect, and `/` `307`s to `/login` signed out.
+- **No migration.** Nothing was asked of the database this session; `0001`–`0009`
+  are all applied and there is nothing outstanding.
+- **`/compare` has a designed interior**, which was the last screen without one.
+  Three directions were mocked against live rows, Kevin took parts of all three,
+  and a second round synthesised them. See "The compare pass, as built".
+- **Q10 is answered: the amber stays as approved.** It remains the single failing
+  contrast number in the app, now by decision rather than by omission.
+- **Three new to-dos are parked**, all Kevin's, all recorded with what is already
+  known about them: the signed-in user's Google photo, concurrent writers during
+  a live draft, and an admin panel against the platform limits. See "Parked,
+  asked for on 2026-08-17". **P1 is cheaper than it looks and P2 is worth
+  settling before the eleven are added**, because it changes the `drafted`
+  table's key.
+- **Measured rather than judged, both themes, on real rows through a browser**:
+  27 gauge widths against the database, contrast on eleven elements, thirteen
+  viewport widths, fourteen tooltips for containment and fourteen for Tab
+  reachability, and a clean console.
+- **Two defects were introduced and caught in the same session** — tooltips
+  anchored off the left edge of the viewport, and two contrast values below the
+  floor, one of them pre-existing on that screen.
+- **A published mockup had two mistyped figures**, found by diffing it against
+  the database and corrected in place. The built page was never affected.
+- **The throwaway probe under `app/auth/` was deleted**, as it must be.
+- `tsc`, `next build`, 62 Python tests and `ruff` all clean.
+- **A `next dev` server is running on port 3000**, restarted cold after `.next`
+  was cleared for the production build.
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-17 legibility session
 
@@ -1766,6 +1978,26 @@ step that ships.
   whole page tree away and rebuilds it. Use a template string:
   `` <title>{`week ${n}`}</title> ``. React warns, on the *server* console, which
   is why this survived two sessions. See "The season arc's tooltips were empty".
+
+- **A tooltip's `align` is the edge it is anchored to, not the way its label is
+  set.** `/compare`'s rail labels are right-aligned text in the leftmost column,
+  so `align="right"` looked obviously correct and put all fourteen boxes **96px
+  off the left edge of the viewport**. Anchor to the edge the box has room to
+  open *away from*, which for a left-hand rail is `left`. Invisible in a diff and
+  invisible in the source; one hover in a browser finds it.
+
+- **Vercel's image cache is keyed on the width you REQUEST, not the size you
+  display.** This is what lets `/compare` show a portrait at 40px for free: it
+  asks for the same 96px `/player/[id]` asks for and scales it in CSS, so the two
+  screens share one cache entry. Ask for 40px instead and it is a second key and
+  a second transformation for every player. **Scale with CSS, never by changing
+  `width`,** unless a new key is what you actually want.
+
+- **A mockup that claims live data has to be checked against the source.** Two of
+  Chase's figures were hand-transcribed wrong into a published mock — see "Two
+  figures were wrong in a published mockup". Diffing the mock's own literals
+  against the database takes a minute; copying numbers by hand feels too small a
+  step to verify, which is exactly why it is not.
 
 - **`opacity: 0` does not remove a box from scrollable overflow.** It still lays
   out and still counts, so a hidden absolutely-positioned tooltip that hangs past
