@@ -8,6 +8,7 @@ import {
   FLOOR,
   STAT_SEASON,
   type BoardRow,
+  type DraftValue,
   type Freshness,
   type PlayerCard,
   type PlayerOption,
@@ -119,6 +120,16 @@ export type PlayerData = {
    * cohort-wide aggregate inside a function named for a single career.
    */
   context: PositionContext[];
+  /**
+   * One row per (player, season) the market put a price on — the other half of
+   * `context`. Same grain, fetched alongside for the same reason: a rank with
+   * no price beside it is half of the question a drafter is asking.
+   *
+   * Sparser than `seasons` on purpose. `adp_history` starts in 2012 and only
+   * lists the players worth drafting, so an undrafted season simply has no row
+   * and the column renders empty — which is the fact, not a gap.
+   */
+  value: DraftValue[];
   freshness: Freshness | null;
   isMember: boolean;
 };
@@ -141,6 +152,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
       cards: [],
       seasons: [],
       context: [],
+      value: [],
       freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
       isMember: membership.data === true,
     };
@@ -148,7 +160,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
 
   const supabase = await createClient();
 
-  const [membership, cards, seasons, context, freshness] = await Promise.all([
+  const [membership, cards, seasons, context, value, freshness] = await Promise.all([
     supabase.rpc("is_league_member"),
     supabase.rpc("player_cards", {
       p_player_ids: playerIds,
@@ -166,6 +178,10 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
     // beside the derivation that uses it, not spread across a constant here
     // and a default there that could drift apart.
     supabase.rpc("position_context", { p_player_ids: playerIds }),
+    // Left at the function's default source for the same reason: which
+    // aggregator's prices these are belongs in SQL beside the ranking that
+    // uses them, not in a constant here that could drift from it.
+    supabase.rpc("draft_value", { p_player_ids: playerIds }),
     supabase.rpc("data_freshness"),
   ]);
 
@@ -173,6 +189,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
   if (cards.error) throw cards.error;
   if (seasons.error) throw seasons.error;
   if (context.error) throw context.error;
+  if (value.error) throw value.error;
 
   const isMember = membership.data === true;
 
@@ -180,6 +197,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
     cards: isMember ? ((cards.data ?? []) as PlayerCard[]) : [],
     seasons: isMember ? ((seasons.data ?? []) as SeasonRow[]) : [],
     context: isMember ? ((context.data ?? []) as PositionContext[]) : [],
+    value: isMember ? ((value.data ?? []) as DraftValue[]) : [],
     freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
     isMember,
   };

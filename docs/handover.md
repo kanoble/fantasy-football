@@ -1,10 +1,37 @@
 # Handover
 
-State of the project as of **2026-08-16**. Read this first, then
+State of the project as of **2026-08-17**. Read this first, then
 [architecture.md](architecture.md) for design rationale and
 [scoring-rules.md](scoring-rules.md) for the league's scoring.
 
 Repo: https://github.com/kanoble/fantasy-football (public)
+
+---
+
+## Start here: which branch you are on
+
+**The working tree is on `draft-cost`, not `main`, and that is deliberate.**
+PR #7 is open and carries the draft-cost pass plus this document. `main` is at
+`7f27c21` and has none of it — including none of this handover, so if you are
+reading an older version of this file, `git checkout draft-cost`.
+
+This cost a confusion worth not repeating. The commits were made on `main`
+locally, then moved to a branch with `git branch draft-cost && git reset --hard
+origin/main` — which is the documented working shape for this repo, and which
+also silently reverted the working tree. **The dev server on port 3000 reads the
+working tree**, so it went on serving the old UI and the new column looked like
+it had never been built. If a change you just made is not on screen, check
+`git branch --show-current` before you check anything else.
+
+Immediate state:
+
+| | |
+|---|---|
+| Branch | `draft-cost`, pushed, **PR #7 open** |
+| `main` | `7f27c21`, untouched |
+| Migration `0009` | **Applied to the live database.** Nothing to run. |
+| Checks | `tsc`, `next build`, 62 pytest, `ruff` — all clean |
+| Unreviewed | Kevin has not yet looked at the cost column |
 
 ---
 
@@ -48,8 +75,15 @@ database also gained a decade of historical draft prices, backfilled once from
 Fantasy Football Calculator, which makes "was he worth his ADP" answerable for
 the first time. See "The player depth pass, as built".
 
-**Everything else built is merged and live. The player depth pass is on
-`player-bio` with an open PR; nothing else is on a branch.**
+**The player depth pass is merged (PR #6).** What is new since is the draft-cost
+pass: the career table now says what a season *cost* beside what it returned,
+which is the feature `adp_history` was backfilled for and the first thing to
+read that table. See "Draft cost, as built".
+
+**This machine now has a browser**, for the first time in the project's life.
+That closes the gap every previous handover ended on — see "The machine has a
+browser now", which is the most useful thing in this document for the next
+session.
 
 ## Live infrastructure
 
@@ -152,7 +186,8 @@ Verified live on 2026-08-16.
 | `draft_board()` / `player_week_log()` | Working. Verified under member and non-member JWTs. |
 | `player_cards()` / `player_seasons()` | Working. Same verification: member gets rows, non-member and email-less get zero, `anon` is refused. |
 | `position_context()` | Working. Same verification. 252ms warm over REST against 171ms for `player_cards()`. |
-| `adp_history` table | **Backfilled, 2,936 rows, 2012–2026.** Read-only to members; INSERT/UPDATE/DELETE all 403. |
+| `adp_history` table | **Backfilled, 2,936 rows, 2012–2026.** Read-only to members; INSERT/UPDATE/DELETE all 403. **Now read by the UI** — see "Draft cost, as built". |
+| `draft_value()` | **Written, tested under rollback, NOT applied.** Migration `0009`. The one outstanding step before `draft-cost` can merge. |
 | **Player bio and portraits** | **Built, on `player-bio`.** 8,940 of 10,145 players have a headshot; 1,190 of 1,259 current skill players. |
 | `data_freshness()` | Working. Powers the dateline on all four screens. |
 | **The app bar and the brand** | **Built and merged.** Crest, wordmark, section tabs, avatar menu, dateline. Markup verified server-side; visuals confirmed by Kevin locally, not on production. |
@@ -460,13 +495,13 @@ polyfill is what is actually shipping.
   and this is three screens that do not, not one. The app bar wraps rather than
   collapsing — a slim bar with a crest is the easiest thing here to make work on
   a phone, and it has not been done.
-- **Nobody has seen the built result in a browser except Kevin.** The machine
-  that built it has no browser access, so types, the production build, the
-  compiled CSS, the theme states and the served HTML were all verified — and the
-  visual result was not. The one trick worth reusing: a throwaway page under
-  `app/auth/` renders any chrome component to an **unauthenticated** URL
-  (`proxy.ts` treats `/auth/` as public), so the server-rendered markup can be
-  curled without a session. Delete it afterwards.
+- **This is no longer true of the machine, only of the screens it has not been
+  pointed at.** Every handover before 2026-08-16 said nobody but Kevin had seen
+  the built result in a browser, because the machine had none. It has one now —
+  see "The machine has a browser now" — and it immediately found a contrast
+  defect that three sessions of reading the source had not. What it still
+  cannot do is hold a session, so it renders components with fixture data
+  rather than driving the real signed-in app.
 
 ### Still open on the UI
 
@@ -689,9 +724,177 @@ Michael/Mike Badgley, Chris/Christopher Herndon, Kenny Gainwell.
 fuzzy resolver is **deliberately not reached for** — 16 auditable nulls beat a
 threshold that might quietly attach the wrong man.
 
-**Nothing in the UI reads `adp_history` yet.** The data is there and the feature
-that draws on it is not built. That is the next obvious thing and it is
-answerable now rather than in a year.
+**The UI now reads `adp_history`.** See "Draft cost, as built" below.
+
+### Draft cost, as built
+
+**Built 2026-08-16, on `draft-cost`. Migration `0009` is written and tested but
+NOT applied** — see "State as of the end of the 2026-08-16 draft-cost session".
+
+The career table could say where a season finished among startable players at a
+position and could not say where it *started*. Every rank on the page was a
+result with no price beside it, which is half of the only question a drafter is
+asking. `draft_value()` in `0009` supplies the other half, and `/player/[id]`
+gains a **Cost** column immediately left of **Rank**.
+
+It reads as a career in two columns. St. Brown: WR63→WR22, WR30→WR7, WR8→WR3,
+WR3→WR3, WR7→WR3 — a player who has beaten his price every year he has played.
+McCaffrey: RB1→RB54 and RB1→RB68 in the two seasons he got hurt, RB1→RB1 and
+RB4→RB1 in two he did not. Neither of those was answerable before.
+
+| Decision | Why |
+|---|---|
+| **The price is a positional rank, not the ADP** | `13.2` beside `WR3` asks the reader to convert between an overall pick number and a positional finish, which is exactly what `0008` was written to stop doing. `WR8` beside `WR3` needs no conversion. The raw ADP and the drafts behind it go in the `title`. |
+| **The two pools are different sizes on purpose** | Cost is out of the players *drafted* at that position (64 backs in 2025); rank is out of everyone who *played* there (151). Forcing them to share one denominator would cap a bust at the end of its own draft pool, and `RB68` is the fact about McCaffrey's 2024. Both denominators travel in the titles. |
+| **No verdict is drawn from the pair** | No green, no arrow, no delta column. A back returning RB6 on an RB2 price had a fine season, and the same refusal is already in the IQR column and the compare page's rank row. The subtraction is one glance away for anyone who wants it. |
+| **Position comes from whoever priced him** | `position_context()` takes position from the weeks, because it describes what a player *did*; this takes FFC's label, because it describes what the market *bought*. They differ on **8 of 1,818 pairs, 0.4%** — 2025's only case is Travis Hunter, drafted WR33 and playing corner, and `WR33 / CB1` describes that season better than either label alone. |
+| **`PK` folds to `K`** | FFC spells kickers `PK`. Unfolded, all 184 of them read as position disagreements and each is ranked in a pool of one. That fold is where the 0.4% above comes from not being 10%. |
+| **Cost is dimmed against Rank** | The columns run cost-first because that is the order the season happened in, but the row should still read result-first. `--muted` against `.rank`'s `--ink` does that without a second colour. |
+| **An empty cell is an em dash** | He was not worth drafting that year, or the season predates the data. Same treatment as every other honest absence on the screen. |
+
+It also lands on `/compare` as a **`2025 draft cost`** row directly above the
+position-rank row, so the pair reads there too. Never marked as a win, and for a
+stronger reason than the rank below it: being drafted earlier is not being
+better — it is the number the row underneath is the answer to.
+
+**The comparison window is 2016–2025, not 2012–2025.** `adp_history` goes back
+to 2012 but `scored_weekly_stats` starts in 2016, so the four earliest seasons
+have a price and nothing to compare it against. They render as ordinary rows
+with no cost, because the career table only lists seasons a player actually
+played. Coverage inside the window is ~99% of matched ADP rows.
+
+**`.career .grid` is `66rem` where `.grid` is `62rem`.** The extra column needs
+its width, and `.grid` is shared with the board and the pickers, which have no
+cost column. Raising the shared value would have made the board scroll earlier
+for nothing.
+
+### The machine has a browser now
+
+Every previous handover ended on the same line: *nobody has seen the built
+result in a browser except Kevin*. That is no longer true, and the setup is
+worth ten minutes of the next session's time because it found two things in this
+one that no amount of reading the source would have.
+
+```bash
+npx playwright install chromium                    # ~/Library/Caches, not the repo
+cd <scratchpad> && npm install playwright pngjs    # NOT in the repo's package.json
+```
+
+Keep it out of `package.json` deliberately: it is a development instrument, not a
+dependency of the app, and the repo has no JS test runner to hang it off.
+
+**The trick that makes it useful is the throwaway probe.** `proxy.ts` treats
+`/auth/` as public, so a page at `app/auth/probe/page.tsx` renders any component
+tree to an **unauthenticated** URL that Playwright can open with no session.
+Feed it real rows pulled straight from Postgres — `player_seasons()`,
+`position_context()`, `player_week_log()` all return JSON via `row_to_json` — and
+what renders is the real layout with the real fonts and the real compiled CSS.
+**Delete it before committing.** It was deleted at the end of this session.
+
+Three things it is good for, in descending order of how much they were worth:
+
+1. **Measuring contrast, not judging it.** Screenshot an element, cluster its
+   pixels by luminance, and compute the ratio between the two clusters. That is
+   what caught the composition bar — a defect that had been described in the
+   handover as a *guess* about light mode for two sessions and turned out to be
+   real in both themes. See "The composition bar was wrong in both themes".
+2. **Sweeping the viewport.** Thirteen widths from 1920 down to 390, reporting
+   `documentElement.scrollWidth` and every element whose right edge is past the
+   viewport. This is how the `.page-head` overflow was disproved rather than
+   guessed at.
+3. **Sweeping the palette.** The probe takes a `?tm=` parameter, so one script
+   renders the same component in sixteen team hues. Anything that depends on
+   `--tm` — and on this app that is the plot, the row stripe, the composition
+   bar and the page head — is only as correct as its worst hue, and Detroit's
+   blue is not a representative sample of a palette that also contains
+   Pittsburgh's gold.
+
+**The scripts themselves are gone.** They lived in the session scratchpad and
+were never committed, because they depend on a `playwright` install that is
+deliberately not in `package.json`. Rebuilding them is minutes, and only one is
+non-obvious — the contrast measurement, which is worth restating because
+eyeballing a screenshot is exactly what let this defect survive three sessions:
+
+> Screenshot the *label element* rather than the page. Convert each pixel to
+> relative luminance, sort, and take the mean of the darkest 8% and the mean of
+> the lightest 8% — those two clusters are the glyphs and the fill behind them,
+> whichever way round. The WCAG ratio between them is the number. It works
+> without knowing what colour anything resolved to, which is the point when the
+> colour is coming from `opacity` over a custom property under a blend mode.
+
+The other three were a width sweep (13 viewports, reporting `scrollWidth` and
+any element whose right edge passes the viewport), a hue sweep (the probe's
+`?tm=` parameter across 16 teams), and a plain `psycopg` query helper that reads
+`POSTGRES_URL_NON_POOLING` out of `.env.local` — which `config.py` does not,
+because it loads `.env`.
+
+**What it still cannot do is sign in.** `getUser()` revalidates against the auth
+server, and reading `auth.users` to mint a matching token is blocked from here.
+So the probe renders components with fixture data; it does not exercise a real
+session. Both remaining browser checks in "Next steps" still need Kevin.
+
+### The composition bar was wrong in both themes
+
+The previous handover flagged this as a light-mode risk: *"the composition bar's
+opacity steps are the thing most likely to be wrong on a light ground."* Right
+instinct, wrong scope. Measured, the labels failed in **both** themes.
+
+The cause was mechanical rather than aesthetic. `opacity` was set on `.comp-seg`
+itself, and **opacity applies to the whole subtree** — so every step past the
+first faded its own label by exactly as much as it faded the background behind
+it. No label could ever win, in any theme, for any team. The third segment
+measured **2.19:1 in light and 2.42:1 in dark**, against the 4.5:1 an 8.8px
+label needs.
+
+The fix moves the fill to a `::before` so the step never reaches the label. **The
+bar looks exactly as it did** — which matters, because Kevin approved that look.
+
+Choosing the label colour then took three attempts, and the two that failed are
+the interesting part:
+
+| Attempt | Why it failed |
+|---|---|
+| Knock every label out to the ground colour | What was already there. Ground on ground as soon as a step fades. |
+| One threshold, ink below it and knockout above | Passes for Detroit and fails for Pittsburgh. The crossover depends on the **hue**, and the threshold that fixes a blue inverts for a gold. |
+| Halo on everything, no knockout | Fails in dark mode on the bright hues — PIT 3.76, LV 3.90, SEA 4.14 — where near-white ink sits on a near-white fill. |
+
+What shipped is both: **faded steps take `--ink` on a halo of the ground, in both
+themes; only the full-strength segment knocks out, and only in dark mode.** That
+asymmetry is a fact about the palette rather than a preference — the `.tm-*`
+dark-mode variants are genuinely bright, so a dark ground knocks out of them
+cleanly, while the light-mode variants are mid-value golds and oranges that
+white cannot sit on. White on Pittsburgh's `#977f0d` is 3.32:1.
+
+**Worst case after the fix: 4.75:1**, across sixteen hues, both themes, all
+three segments. `mix-blend-mode: luminosity` is gone — it gave the glyphs the
+backdrop's own hue and chroma, which is the opposite of what a label on a
+coloured field needs.
+
+**Re-run the sweep if `STEPS` or any `.tm-*` value moves.** It is the only check
+that covers this, and there is no test that will catch you.
+
+### The `.page-head` overflow does not reproduce
+
+The previous handover's next-step 4 recorded a defect spotted in a screenshot:
+*"On `/player/[id]` the dateline runs to the very edge of the viewport while the
+career panel below stops short of it."* It was deferred deliberately, so it was a
+known thing rather than a discovery.
+
+Measured at thirteen viewport widths from 1920 to 390, on the full player page
+with a portrait, a bio, a stat strip and a five-season career table:
+`documentElement.scrollWidth` **equals the viewport at every one of them**, and
+`.page-head`, `.dateline`, `.appbar`, `.stats` and `.career` share a right edge
+to the pixel at every one of them. There is no page-level overflow and no
+misalignment between the head and the panel.
+
+What is genuinely there, and is the likeliest thing the screenshot showed, is
+that **`.career` has `1.4rem` of padding inside its border while `.page-head`
+has none** — so the panel's *contents* stop 23px short of the dateline while
+their borders align. That is the panel behaving as a panel, not a bug.
+
+The one thing not ruled out is a state the fixture did not have: a much longer
+name, or an injury pill on the bio line. If it is seen again, grab the viewport
+width with it — the sweep above will find it in a minute given a width.
 
 ### The one thing sized by eyeball, and what it cost
 
@@ -839,10 +1042,13 @@ what `npm run dev` needs in the allowlist.
    *shared* half — with one address on the allowlist, "everyone sees the same
    board" is a property nothing has exercised.
 
-3. **The layout has never been looked at in a browser by the machine that built
-   it.** Data, routing, auth, RLS and server-rendered markup are all verified
-   end to end; the visual result is verified only by Kevin looking at it. If a
-   grid looks wrong, that is the gap.
+3. **The layout can now be looked at by the machine, but only signed out.**
+   This used to read "never been looked at in a browser". Playwright plus a
+   throwaway public probe covers layout, contrast and the theme states with
+   real components and real CSS. What it does not cover is anything behind a
+   session — the drafted toggle round-tripping, the account popover, a real
+   sign-in — because `getUser()` revalidates against the auth server and
+   minting a matching token is blocked. Those still need Kevin.
 
 4. **Yahoo stat IDs** in `YAHOO_STAT_ID_TO_NFLVERSE` are the widely-circulated
    values, never checked against a live payload. Not on the critical path.
@@ -976,6 +1182,11 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **Drafted is keyed on `(season, norm_name)`** | One draftable player has no `player_id`. See the same section. |
 | **No FK from `drafted` to `adp_projections`** | The refresh truncates that table daily; an FK aborts it. |
 | **Drafted state is client state over a server-rendered board** | The board revalidates hourly; a mark has to appear the instant it is pressed. |
+| **Draft cost is a positional rank, not an ADP** | An overall pick number beside a positional finish makes the reader convert between two scales, which is the mistake `0008` exists to stop. See "Draft cost, as built". |
+| **Cost and rank keep different denominators** | Drafted-at-that-position against everyone-who-played-there. One shared pool would cap a bust at the end of its own draft pool. |
+| **The cost/rank pair gets no verdict** | Same refusal as the IQR column and the compare page's rank row: earlier is not better, it is the number the result answers. |
+| **Composition labels are measured, not judged** | The bar's labels failed in both themes for two sessions while being described as a light-mode risk. See "The composition bar was wrong in both themes". |
+| **The palette is swept by hue, not sampled** | Anything keyed on `--tm` is only as correct as its worst of thirty-two hues, and Detroit's blue is not a representative sample of one that also holds Pittsburgh's gold. |
 
 ## Open questions
 
@@ -1026,11 +1237,20 @@ runtime via `/game/nfl` rather than hardcoding.
 
 ## Next steps, in the order I would do them
 
-PRs #1–#5 are merged. **PR #6 (`player-bio`) is open** and carries the player
-depth pass.
+PRs #1–#6 are merged. **The draft-cost pass is on `draft-cost`.**
 
 **The draft is 30 August. That is the deadline everything below is ranked
 against**, and as of this handover it is fourteen days away.
+
+0. **Kevin looks at the cost column, then PR #7 merges.** Migration `0009` is
+   already applied, so merging is the only step left and the database needs
+   nothing. Check out `draft-cost` before starting the dev server or the screen
+   will not have it — see "Start here".
+
+   The thing worth his eye rather than the machine's: whether **Cost dimmed
+   against Rank** is the right weighting. The machine can prove both are
+   legible and cannot judge whether the row still reads result-first, which is
+   the whole intent of the dimming.
 
 1. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
    one, clear the board. The feature has never met the thing it is for, and this
@@ -1065,26 +1285,27 @@ against**, and as of this handover it is fourteen days away.
    The app bar is the easy half; the board is the hard half and probably wants
    its own layout rather than a reflow — see "Still owed on design".
 
-4. **A `.page-head` overflow, found and not chased.** On `/player/[id]` the
-   dateline runs to the very edge of the viewport while the career panel below
-   stops short of it. Spotted in a screenshot at the end of the depth-pass
-   session; Kevin deferred it deliberately, so it is a known thing rather than a
-   discovery. The portrait making the page head taller may have exposed it
-   rather than caused it — check `/` and `/compare` before assuming it is new.
-
-5. **Build the feature `adp_history` exists for.** The data is backfilled and
-   nothing reads it. "What did a player drafted here actually return, in this
-   league's scoring" is now a join away, and it is the one question this app can
-   answer that no commercial tool can. Start within-season (2026 ADP against
-   2026 projection against 2025 delivered) — it is most of the value and needs
-   no new ingest.
-
-6. **The `/player` and `/compare` interiors**, which is the oldest outstanding
+4. **The `/player` and `/compare` interiors**, which is the oldest outstanding
    design debt now that their chrome is settled. Lower stakes than the three
-   above: those screens are consistent and not broken.
+   above: those screens are consistent and not broken. The cost column is one
+   more reason to look at `/compare`'s metric table, which is now eleven rows
+   of the board's tokens in a layout nobody designed.
 
-7. **In-season: run the Yahoo score diff** to close Q2 and Q3.
-8. **Then team defense** (Q4), once Q3 is settled.
+5. **The rest of what `adp_history` can answer.** The per-player half is built
+   (see "Draft cost, as built"); the cross-player half is not. "What has a pick
+   at RB4 actually returned, over ten seasons" is a `group by` away and would
+   put a curve behind every price on the board rather than beside one career.
+   That is a Trends screen, and the nav already holds a slot for it.
+
+6. **In-season: run the Yahoo score diff** to close Q2 and Q3.
+7. **Then team defense** (Q4), once Q3 is settled.
+
+Two items are gone from this list rather than done:
+
+- **The `.page-head` overflow** was measured at thirteen widths and does not
+  reproduce. See "The `.page-head` overflow does not reproduce".
+- **The composition bar's light-mode risk** was real, was worse than described,
+  and is fixed. See "The composition bar was wrong in both themes".
 
 Worth knowing about item 3: **the arc, the composition bar and the field band
 are all desktop-sized**, and the arc's labels shrink with the container because
@@ -1129,6 +1350,45 @@ Note the working shape this settled into: the work is committed to `main`
 locally, then moved onto a branch when a PR is wanted. Committing is cheap and
 local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
+
+## State as of the end of the 2026-08-16 draft-cost session
+
+- **PR #6 is merged. The draft-cost pass is on `draft-cost` as PR #7**, three
+  commits: the composition-label fix, the cost column, and this handover.
+  **`main` does not have any of it.**
+- **Migration `0009_draft_value.sql` IS applied to the live database**, before
+  the code that reads it shipped — the same order `0001`–`0008` used. Verified
+  after the fact: `prosecdef` false (SECURITY INVOKER), `provolatile` `s`
+  (stable), and `EXECUTE` granted to `authenticated` and `service_role` but not
+  `anon`. It is additive: one function, one grant, nothing dropped or narrowed.
+- **RLS on it was verified with HS256 tokens**, the way `0002`–`0008` were: a
+  member reads 16 rows, a member in different email casing reads 16, a
+  non-member reads 0, a token with no `email` claim reads 0, and `anon` is
+  refused outright with `permission denied for function draft_value`.
+- **Note this asymmetry, because it is the one thing that could confuse a
+  rollback:** the function exists in production while `main` has no code that
+  calls it. That is harmless — nothing deployed references it — but it means
+  reverting the branch does not require touching the database, and re-applying
+  `0009` is not something a future session needs to do.
+- **This machine has a browser for the first time.** See "The machine has a
+  browser now". It is the reason two of the three findings below exist.
+- **The composition bar's labels were failing in both themes**, not just light
+  as the previous handover guessed — 2.19:1 and 2.42:1 on the third segment.
+  Fixed and measured to a worst case of 4.75:1 across sixteen team hues.
+- **The `.page-head` overflow does not reproduce** at any of thirteen viewport
+  widths. Recorded rather than silently dropped, with what to grab if it is
+  seen again.
+- **The cost column was verified against real data**, not reasoned about: the
+  rows on screen are `draft_value()`'s own output, and the edge cases were
+  exercised — a never-drafted player returns zero rows and renders an em dash,
+  `PK` folds to `K` across all 184 kickers, and the position-disagreement rate
+  is 8 of 1,818 rather than the ~7% a first count suggested before the fold.
+- `tsc`, `next build`, 62 Python tests and `ruff` all clean.
+- **The throwaway probe under `app/auth/` was deleted**, as it must be.
+- **Still not seen by a human**: the cost column in a browser. The machine has
+  looked at it in both themes; Kevin has not.
+- **A `next dev` server may still be running on port 3000.**
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-16 player depth session
 
