@@ -19,17 +19,29 @@ built" below.
 verdict**. Migration `0010` is written and applied. The project also has a test
 runner for the first time.
 
+**The next piece of work is already identified and it is next-step 0: rank
+`/market`'s rail by where you are in the draft.** Kevin saw the built screen,
+found three defects in it — all fixed, all recorded — and then named the design
+problem underneath: the rail answers "who is the best value in the draft" when a
+drafter is only ever asking "who is the best value I can still get". Start there
+rather than at anything below it.
+
 Immediate state:
 
 | | |
 |---|---|
-| Branch | `main` |
+| Branch | `main`, clean. **Three commits ahead of `origin/main` and not pushed.** |
 | Migrations | `0001`–`0010`. **`0010` is applied to the live database.** |
-| Checks | `tsc`, `next build`, **32 `node --test`**, 62 pytest, `ruff` — all clean |
-| Open decisions | **Kevin answered all five from the value-chart plan.** See "The value chart, as built". |
+| Checks | `tsc`, `next build`, **38 `node --test`**, 62 pytest, `ruff` — all clean |
+| Open decisions | **All five from the value-chart plan are answered.** The open one is the rail, above. |
 
-**Three things changed outside the new screen**, and a session that does not
-know about them will lose time:
+**Nothing is pushed, and `git push` is what ships to production.** That is the
+deliberate shape here — see "Git and deployment" — so the first decision of the
+next session is whether three commits of a new screen go live before Kevin has
+run a mock draft against it.
+
+**Four things changed outside the new screen**, and a session that does not know
+about them will lose time:
 
 1. **There is a test runner now: `npm test`.** It is `node --test` over
    `lib/*.test.ts`, no new dependency, and it covers the residual math. **It
@@ -46,6 +58,11 @@ know about them will lose time:
    `./board.ts` with the extension. Node resolves ES modules by exact specifier,
    so that import is the only thing standing between the residual math and
    having any tests at all.
+
+4. **A `next dev` server was left running on port 3000** at the end of this
+   session, on Node 24. If a page will not load or refresh, check it is still
+   alive before assuming the code is broken — and if you have run `npm run build`
+   since, `rm -rf .next` and restart, because the two share that directory.
 
 **Three ways this repo has now hidden a change from you. All three look like a
 mistake somewhere else, and all three waste the session that hits them.**
@@ -597,6 +614,9 @@ polyfill is what is actually shipping.
   the last screen that had never been designed, so this list no longer contains
   one. What it left undone is stated there: the screen still shows a single
   season while `/player/[id]` shows a career.
+- **`/market`'s rail is ranked by the wrong question.** See next-step 0. It is
+  the one piece of unfinished design on the newest screen, and it is unfinished
+  because it was only visible once the axis was pointing the right way.
 - **The board's column heads still explain nothing.** Deliberately out of scope:
   they are already `.sortbtn` buttons and a button cannot nest in a button, so
   they need a different trigger. `.r-head` there is also `--faint`, i.e. 1.96:1,
@@ -1892,19 +1912,66 @@ eleven elements of the compare pass, is 7:1 or better in both themes.
 
 ## Next steps, in the order I would do them
 
-PRs #1–#9 are merged.
+PRs #1–#9 are merged. **Three commits sit on `main` unpushed** — see "State as
+of the end of this session".
 
 **The draft is 30 August. That is the deadline everything below is ranked
 against**, and as of this handover it is thirteen days away.
 
-0. **Kevin runs a mock draft.** He said so himself, and he expects to come back
+0. **Rank `/market`'s rail by where you are in the draft. This is the next piece
+   of work and it is Kevin's own diagnosis.**
+
+   The rail is headed "Best available" and ranks purely by residual, which
+   answers *"who is the best value at any price"*. With the axis corrected that
+   turned out to top the list with McCaffrey (ADP 5.2) and Puka Nacua (4.6) —
+   arithmetically right, because they do beat what their price buys, and useless
+   at pick 40 because they are long gone. **A drafter is never asking "who is the
+   best value in the draft". He is asking "who is the best value I can still
+   get".** Those are different questions and the rail is currently answering the
+   wrong one.
+
+   What it needs is the round as context. The pieces are all present and none of
+   them is a migration:
+
+   - **`drafted` already knows how many picks have gone.** `fetchDrafted()` is
+     polled every 15s on this screen and `drafted.size` is the pick count, so
+     "which round is it" is available without asking anybody.
+   - **ADP is a distribution, not a promise.** `adp_history` carries `stdev` and
+     `times_drafted` per row and `draft_board()` does not return either. A
+     player's chance of surviving to your next pick is roughly the tail of his
+     ADP past that pick number, and `stdev` is what makes that more than a step
+     function. **Getting `stdev` onto the board is the one piece of plumbing this
+     needs** — probably as a widening of `market_value()`, which is new enough
+     that nothing depends on its shape yet.
+   - **The pick number is not the pick count.** A 12-team draft snakes, so
+     Kevin's next pick is a function of his seat and the round, and the app does
+     not know his seat. **Ask before inventing one.** The cheap version is a
+     number the reader sets once; the expensive version is a league integration
+     that is still stubbed.
+
+   Two traps worth naming before anybody starts. **This must not become an input
+   filter** — narrowing the players before `buildModel` would refit every
+   baseline, which is the failure `lib/value.test.ts` exists to catch, so
+   availability belongs in the ranking and the scope and nowhere else. And **the
+   dots must not move.** Re-ranking the rail is a change to a list; if it also
+   starts reordering or re-placing the scatter, the scope-invariance property is
+   gone.
+
+   Worth deciding at the same time: whether "best available" should stay a pure
+   residual ranking with the *unavailable* filtered out, or become a blended
+   score of residual and survival probability. The first is honest and simple;
+   the second is what a draft aid actually wants, and it buries a weighting in a
+   place the reader cannot see. The app's own precedent — see `FORM_WEIGHTS` —
+   says put the weighting in a file somebody reads.
+
+1. **Kevin runs a mock draft.** He said so himself, and he expects to come back
    with changes to the value chart afterwards. Three things ride on it: the
    drafted toggle finally meets the thing it is for (see item 1), `/market` gets
    used against a live board rather than a static one, and the judgment calls the
    build had to make — the 192-pick default scope, the fixed residual domains,
    `NEIGHBORS = 13` — get answered by use rather than by measurement alone.
 
-1. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
+2. **Rehearse a mock draft on production.** Mark thirty players, hide them, undo
    one, clear the board. The feature has never met the thing it is for, and this
    is the last cheap moment to discover that "hide" was the wrong call over "grey
    out". It also closes the one path never exercised through a real browser
@@ -2097,6 +2164,31 @@ Note the working shape this settled into: the work is committed to `main`
 locally, then moved onto a branch when a PR is wanted. Committing is cheap and
 local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
+
+## State as of the end of this session
+
+- **Three commits on `main`, none pushed.** `7a51806` (the plan, from the
+  previous session), `83d57c0` (the build), `74db5c0` (the axis fix). The working
+  tree is clean.
+- **`0010_market_value.sql` is applied to the live database.** It went in before
+  any code read it, the way `0001`–`0009` did. **The migration is committed and
+  the database already has it — do not apply it twice**; both functions are
+  `create or replace`, so a re-run is harmless, but check before assuming.
+- **`/market` has never been seen signed in.** Everything visual was verified
+  through a throwaway probe under `app/auth/` with real rows and no session, and
+  the probe was deleted. `getUser()` revalidates against the auth server and this
+  machine still cannot hold a session, so RLS on the new functions has only been
+  exercised over REST with hand-signed tokens — thoroughly, but not through a
+  browser.
+- **The `--good` change and the `.nvmrc` pin both touch things outside this
+  screen.** Neither has been seen by Kevin on production.
+- **What Kevin found on first read, and what it cost:** the axis was drawn
+  backwards, neither axis was labelled, and the hollow-dot encoding was
+  destroying the sign colour on the default view. All three are fixed and written
+  up under "The axis was backwards on first read". The lesson worth keeping is
+  that **the probe caught a hydration failure, a useless default view and a
+  wasted axis, and did not catch any of these three** — it renders what the code
+  says, and cannot tell you the code is answering the wrong question.
 
 ## State as of the end of the 2026-08-17 chart session
 
