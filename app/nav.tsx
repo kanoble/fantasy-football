@@ -12,14 +12,20 @@ import Link from "next/link";
  * resolve — so a loop would have to be cast back to `Route`, throwing away the
  * exact check this app turned on.
  *
- * These three are one family: they are all about *players*. When the Yahoo
+ * These four are one family: they are all about *players*. When the Yahoo
  * layer lands, League and Trends are about *teams*, and they go after a
- * `<span className="tab-div" />` rather than becoming a fourth and fifth peer —
- * the rule says which family you are in before anyone reads a word. Draft day
- * is not a tab at all; it is a state the board is in, and it belongs beside the
- * avatar. See `app/chrome.tsx`.
+ * `<span className="tab-div" />` rather than becoming further peers — the rule
+ * says which family you are in before anyone reads a word. Draft day is not a
+ * tab at all; it is a state the board is in, and it belongs beside the avatar.
+ * See `app/chrome.tsx`.
+ *
+ * Market sits on this side of the divider rather than waiting to become Trends.
+ * It is about which *players* are priced below what they return; Trends is the
+ * cross-player historical screen `adp_history` can answer — "what has a pick at
+ * RB4 actually returned over ten seasons" — which is a bigger and different
+ * thing, and is about the market rather than about anyone in it.
  */
-export type Section = "board" | "players" | "compare";
+export type Section = "board" | "players" | "compare" | "market";
 
 export function Nav({ current }: { current: Section }) {
   return (
@@ -44,6 +50,13 @@ export function Nav({ current }: { current: Section }) {
         aria-current={current === "compare" ? "page" : undefined}
       >
         Compare
+      </Link>
+      <Link
+        className="tab"
+        href="/market"
+        aria-current={current === "market" ? "page" : undefined}
+      >
+        Market
       </Link>
     </nav>
   );

@@ -54,8 +54,13 @@
   --band: #edf0ef;
   --band-edge: #d3dad8;
 
-  /* semantic, and deliberately not the accent */
-  --good: #1c8368;
+  /* semantic, and deliberately not the accent.
+     --good is #1b7f64 rather than the #1c8368 it was through PR #9: measured,
+     the old value was 4.39:1 against --bg, so it failed the 4.5:1 floor the
+     moment /market set a residual in it at 13.6px on the page ground. Three
+     percent darker clears it at 4.62:1 and lifts the two existing text uses
+     (the game log's high week, the arithmetic check) from 4.67 to 4.92. */
+  --good: #1b7f64;
   --bad: #a8392c;
 
   /* depth. A dark inner top edge and a light inner bottom edge is what makes a
@@ -2819,4 +2824,483 @@ table.log td.z {
   color: var(--muted);
   border-top: 1px solid var(--rule);
   padding-top: 1rem;
+}
+
+/* ===========================================================================
+   /market — the value chart
+   =========================================================================== */
+
+/* The first instrument in this app that draws a verdict, and the only screen
+   with no `--tm` on it anywhere.
+
+   Team hue would be 32 categories of noise on a scatter, and `/compare` already
+   found that a reader cannot derive meaning from it quickly — two Lions were
+   indistinguishable. So the one colour decision here is `--good` / `--bad` on
+   the sign of the residual.
+
+   THAT PAIR MEASURES ΔE 8.1 UNDER DEUTERANOPIA IN LIGHT AND 7.8 IN DARK, which
+   is the floor and is passable only with a second encoding. There is one: the
+   sign is already which side of the zero line a dot sits on, and the readout
+   spells it with a `+` or a `-`. Colour is redundant here by design and must
+   never become the only carrier. If a future change puts these two hues
+   anywhere the position does not also state the sign, re-measure before
+   shipping it. */
+
+.mkt {
+  padding-top: 0.2rem;
+}
+
+/* Why a control is inert, said in words. A disabled chip with no explanation
+   reads as broken rather than as not applicable. */
+.mkt-why {
+  margin: 0.1rem 0 0;
+  font-size: 0.76rem;
+  color: var(--dim);
+}
+
+.mkt-body {
+  display: grid;
+  grid-template-columns: 1fr 17rem;
+  gap: 1.6rem;
+  align-items: start;
+  padding-top: 0.7rem;
+}
+
+/* y labels | plot, with the cost axis under the plot only — so the numbers on
+   the left do not push the axis out of line with what it labels. */
+.mkt-frame {
+  display: grid;
+  grid-template-columns: 1.1rem 2.6rem 1fr;
+  grid-template-rows: 30rem 2.9rem;
+}
+
+.mkt-yaxis {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+}
+
+/* The vertical's name, on the axis it names. Rotated rather than set above the
+   plot because it belongs to the scale, and it changes with the vertical — a
+   caption three lines below cannot do that job at a glance. */
+.mkt-ylab {
+  grid-column: 1;
+  grid-row: 1;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  place-self: center;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.mkt-ytick {
+  position: absolute;
+  right: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+.mkt-ytop { top: 0; }
+.mkt-ymid { top: 50%; transform: translateY(-50%); color: var(--ink); }
+.mkt-ybot { bottom: 0; }
+
+/* The plot is a milled channel, like every other instrument here: dark inner
+   top edge, light inner bottom edge, so the field sits inside the surface
+   rather than on it. All `inset`, so nothing costs a paint across 300 dots. */
+.mkt-plot {
+  position: relative;
+  grid-column: 3;
+  grid-row: 1;
+  background: var(--panel);
+  border: 1px solid var(--firm);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 2px var(--groove-top),
+    inset 0 -1px 0 var(--groove-bot);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.mkt-vgrid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--rule);
+}
+
+/* Past the scope's cutoff. Shaded rather than left blank, because the cost axis
+   is deliberately fixed: it does not shrink to fit the scope, since rescaling it
+   would move every dot the moment the cutoff changed. So the empty region is
+   named as the end of the draft rather than reading as missing data. */
+.mkt-beyond {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-right: 1px dashed var(--firm);
+  background: var(--panel-hi);
+  opacity: 0.55;
+}
+
+.mkt-beyond-lab {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+/* The market's own expectation. The only rule on the plot drawn in ink rather
+   than a grid tone, because every reading on this screen is taken against it. */
+.mkt-zero {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--firm);
+}
+
+.mkt-zero-lab {
+  position: absolute;
+  left: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.mkt-zero-up { top: calc(50% - 1.05rem); }
+.mkt-zero-down { top: calc(50% + 0.3rem); }
+
+.mkt-dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.mkt-dot.up { background: var(--good); }
+.mkt-dot.down { background: var(--bad); }
+
+/* Past the end of the fixed axis, drawn against the frame. A clamped dot left
+   unmarked reads as "about the worst here" when the truth is "further than this
+   chart draws" — and it is always a bust, because the lower tail is the long
+   one. A flat edge rather than a colour: the sign is already carrying colour. */
+.mkt-dot.off {
+  border-radius: 1px;
+  width: 9px;
+  height: 4px;
+  margin: -2px 0 0 -4.5px;
+}
+
+/* One season behind a figure is a fact about one year wearing the clothes of a
+   career. Hollow rather than dimmer: opacity alone would read as "further
+   away", where a ring reads as "less filled in" — the same distinction the
+   board already draws between a ceiling week and a floor week. */
+.mkt-dot.thin {
+  background: transparent;
+  border: 1.5px solid currentcolor;
+}
+
+.mkt-dot.up.thin { color: var(--good); }
+.mkt-dot.down.thin { color: var(--bad); }
+
+.mkt-dot.on {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+  z-index: 3;
+}
+
+.mkt-name {
+  position: absolute;
+  transform: translate(0.65rem, -50%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--dim);
+  white-space: nowrap;
+  pointer-events: none;
+  text-shadow: 0 0 3px var(--panel), 0 0 3px var(--panel);
+}
+
+/* Flipped to the left of its dot near the right edge. `.mkt-plot` is
+   `overflow: hidden`, so a label running past the frame is cut in half rather
+   than merely untidy — which is how "Marvin Jones" first rendered as "Marvi". */
+.mkt-name.flip {
+  transform: translate(calc(-100% - 0.65rem), -50%);
+}
+
+/* The readout. Contained by flipping sides near the edges rather than by
+   letting it hang out — `.mkt-plot` is `overflow: hidden`, so a box that ran
+   past an edge would simply be cut off. */
+.mkt-read {
+  position: absolute;
+  z-index: 4;
+  display: grid;
+  gap: 0.05rem;
+  transform: translate(0.9rem, -105%);
+  min-width: 11rem;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-lift);
+  border: 1px solid var(--firm);
+  border-radius: 2px;
+  box-shadow: 0 6px 18px var(--shadow);
+  pointer-events: none;
+}
+
+.mkt-read.left { transform: translate(calc(-100% - 0.9rem), -105%); }
+.mkt-read.below { transform: translate(0.9rem, 0.6rem); }
+.mkt-read.left.below { transform: translate(calc(-100% - 0.9rem), 0.6rem); }
+
+.mkt-read-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.mkt-read-sub {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--dim);
+}
+
+.mkt-read-fig {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+  padding-top: 0.15rem;
+}
+
+.mkt-read-fig .up { color: var(--good); font-weight: 600; }
+.mkt-read-fig .down { color: var(--bad); font-weight: 600; }
+
+/* The arithmetic, not just the answer. "17.2 against an expected 12.4" is a
+   claim a reader can disagree with; "+4.8" is one they can only accept. */
+.mkt-read-sum {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+.mkt-xaxis {
+  position: relative;
+  grid-column: 3;
+  grid-row: 2;
+}
+
+/* Which way the axis runs, said on the axis. The direction is the one thing a
+   reversed scale has to state outright: pick 1 is the most expensive player in
+   the draft, so cost rising to the right means the pick number falls. */
+.mkt-xlab {
+  position: absolute;
+  top: 1.35rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.mkt-xlab-c {
+  color: var(--ink);
+}
+
+.mkt-xtick-end {
+  color: var(--ink);
+}
+
+.mkt-xtick {
+  position: absolute;
+  top: 0.25rem;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+/* The key. Its absence was the first question a reader asked of this screen:
+   why are some circles filled and some not? */
+.mkt-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.4rem;
+  margin: 0.55rem 0 0;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.mkt-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The dots in the key are the same class as the dots on the plot, so the key
+   cannot drift from what it describes. Only the positioning is undone. */
+.mkt-key-dot {
+  position: static;
+  margin: 0;
+  flex: none;
+}
+
+.mkt-legend {
+  margin: 0.7rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--dim);
+  max-width: 54rem;
+}
+
+/* --------------------------------------------------------------------------
+   The rail: who is worth taking, and who cannot be drawn at all.
+   -------------------------------------------------------------------------- */
+
+.mkt-rail {
+  display: grid;
+  gap: 1.3rem;
+  align-content: start;
+}
+
+.mkt-rail-block {
+  border-left: 1px solid var(--rule);
+  padding-left: 1rem;
+}
+
+.mkt-rail-head {
+  margin: 0 0 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.mkt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+
+/* name | position and price | residual */
+.mkt-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "name num" "meta num";
+  align-items: center;
+  gap: 0 0.6rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.mkt-item-name {
+  grid-area: name;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mkt-item-name:hover {
+  color: var(--amber);
+  text-decoration: underline;
+}
+
+.mkt-item-meta {
+  grid-area: meta;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  color: var(--dim);
+}
+
+.mkt-item-num {
+  grid-area: num;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.mkt-item-num.up { color: var(--good); }
+.mkt-item-num.down { color: var(--bad); }
+
+.mkt-rail-note {
+  margin: 0.55rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--dim);
+}
+
+.mkt-reason {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.mkt-reason-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.mkt-reason-n {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+.mkt-reason-list {
+  margin: 0.15rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.mkt-quiet {
+  color: var(--dim);
+  text-decoration: none;
+}
+
+a.mkt-quiet:hover {
+  color: var(--amber);
+  text-decoration: underline;
+}
+
+/* The rail goes under the plot before the plot itself gets too narrow to read.
+   Desktop-first is unchanged — this is the one breakpoint that keeps a 15-inch
+   laptop usable, not the start of a mobile design. */
+@media (max-width: 78rem) {
+  .mkt-body {
+    grid-template-columns: 1fr;
+  }
+
+  .mkt-rail {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.6rem;
+  }
 }
