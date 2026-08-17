@@ -16,6 +16,7 @@
  * one.
  */
 
+import { check } from "./query-error";
 import { createClient } from "./supabase/client";
 
 /** One row of `drafted`, as the board reads it. */
@@ -29,10 +30,10 @@ type DraftedRow = { norm_name: string };
  */
 export async function fetchDrafted(season: number): Promise<Set<string>> {
   const supabase = createClient();
-  const { data, error } = await supabase.from("drafted").select("norm_name").eq("season", season);
+  const result = await supabase.from("drafted").select("norm_name").eq("season", season);
 
-  if (error) throw error;
-  return new Set(((data ?? []) as DraftedRow[]).map((row) => row.norm_name));
+  check("drafted select", result);
+  return new Set(((result.data ?? []) as DraftedRow[]).map((row) => row.norm_name));
 }
 
 /**
@@ -46,23 +47,23 @@ export async function fetchDrafted(season: number): Promise<Set<string>> {
  */
 export async function markDrafted(season: number, normName: string): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase
+  const result = await supabase
     .from("drafted")
     .upsert({ season, norm_name: normName }, { onConflict: "season,norm_name", ignoreDuplicates: true });
 
-  if (error) throw error;
+  check(`drafted upsert (${normName})`, result);
 }
 
 /** Undo a mark. */
 export async function unmarkDrafted(season: number, normName: string): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase
+  const result = await supabase
     .from("drafted")
     .delete()
     .eq("season", season)
     .eq("norm_name", normName);
 
-  if (error) throw error;
+  check(`drafted delete (${normName})`, result);
 }
 
 /**
@@ -73,7 +74,7 @@ export async function unmarkDrafted(season: number, normName: string): Promise<v
  */
 export async function clearDrafted(season: number): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase.from("drafted").delete().eq("season", season);
+  const result = await supabase.from("drafted").delete().eq("season", season);
 
-  if (error) throw error;
+  check(`drafted clear (season ${season})`, result);
 }

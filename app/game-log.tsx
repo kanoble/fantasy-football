@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 
 import { CEILING, FLOOR, STAT_SEASON, type WeekRow } from "@/lib/board";
+import { QueryError } from "@/lib/query-error";
 import { LEAGUE_RULES, decompose, type StatRule } from "@/lib/scoring";
 import { createClient } from "@/lib/supabase/client";
 import { Composition } from "./composition";
@@ -51,8 +52,14 @@ export function GameLog({
       .rpc("player_week_log", { p_player_id: playerId, p_season: season })
       .then(({ data, error: rpcError }) => {
         if (!live) return;
-        if (rpcError) setError(rpcError.message);
-        else setWeeks((data ?? []) as WeekRow[]);
+        if (rpcError) {
+          // The panel below says one sentence, because this one renders where a
+          // reader is looking rather than in an overlay. The full diagnosis —
+          // function, code, details, hint — goes to the console, which is the
+          // only place it is any use.
+          console.error(new QueryError("player_week_log()", rpcError));
+          setError(rpcError.message);
+        } else setWeeks((data ?? []) as WeekRow[]);
       });
 
     return () => {
