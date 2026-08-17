@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
-import { ADP_SEASON, signedDelta } from "@/lib/board";
+import { ADP_SEASON, LEAGUE_TEAMS, signedDelta } from "@/lib/board";
 import { fetchDrafted } from "@/lib/drafted";
 import {
   COST_TICKS,
@@ -12,9 +12,16 @@ import {
   VERTICALS,
   buildModel,
   costX,
+  nextPick,
+  rankRail,
+  roundWindow,
   scopeModel,
+  seatPicks,
   type Dot,
   type Lookback,
+  type PickTarget,
+  type RailEntry,
+  type RailMode,
   type Reason,
   type ValueModel,
   type ValuePlayer,
@@ -79,6 +86,54 @@ const at = (value: number) => `${value.toFixed(3)}%`;
 /** Past this point on the cost axis, a label would be clipped by the frame. */
 const LABEL_FLIP_X = 78;
 
+/** Sixteen rounds of twelve, which is `DRAFT_PICKS`. */
+const ROUNDS = DRAFT_PICKS / LEAGUE_TEAMS;
+
+/**
+ * Where the seat is kept, and why it is kept here rather than in Postgres.
+ *
+ * `drafted` is a fact about the room and lives in a shared table. A seat is a
+ * fact about one reader — twelve people on this board have twelve different
+ * ones — so putting it in the database would mean a per-user row and a policy
+ * for a number that never leaves this screen.
+ *
+ * It is persisted rather than held in state because of *when* it gets set: the
+ * seat is drawn moments before the first pick, and a reload mid-draft that
+ * silently forgot it would be discovered at the worst possible time.
+ */
+const SEAT_KEY = "nff.market.seat";
+
+/**
+ * What is behind one player's odds, on hover.
+ *
+ * Spelled out rather than left as a bare percentage because the two bases are
+ * genuinely different claims: one is a distribution over a thousand observed
+ * drafts, the other is "his price is past your pick" and nothing more.
+ */
+function oddsTitle(entry: RailEntry): string {
+  if (entry.basis === "step") {
+    return "No published spread for him, so this is his price alone: available if he is priced past your pick, gone if he is not.";
+  }
+  const drafts = entry.dot.player.spread?.drafts;
+  return `Chance he is still on the board when you are up, from the spread of ${
+    drafts ? `${drafts.toLocaleString()} drafts` : "the drafts behind his price"
+  }, widened for how far the two sources disagree about what he costs.`;
+}
+
+/** How the two rail orderings are named and explained. */
+const RAIL_MODES: Record<RailMode, { label: string; hint: string }> = {
+  value: {
+    label: "Best value",
+    hint:
+      "Ranked on the residual alone, exactly as this rail always has been, with anyone who cannot realistically last until your pick removed. Ask it for the best player who might still fall to you.",
+  },
+  draft: {
+    label: "Best expected",
+    hint:
+      "Ranked on the residual multiplied by the chance he is still there — the value you can expect to actually capture. A coin flip at +40 scores below a certainty at +25, which is the trade you are really making. Nobody is removed; a player who is certainly gone sinks on his own.",
+  },
+};
+
 export function Chart({
   players,
   statSeason,
@@ -95,11 +150,33 @@ export function Chart({
   const [maxCost, setMaxCost] = useState<number | undefined>(DRAFT_PICKS);
   const [near, setNear] = useState<number | null>(null);
 
+  // Which round the reader is asking about, and which seat he is in. Both start
+  // empty, and the screen behaves exactly as it did before either existed until
+  // one is set — see `rankRail`.
+  const [round, setRound] = useState<number | null>(null);
+  const [seat, setSeat] = useState<number | null>(null);
+  const [railMode, setRailMode] = useState<RailMode>("value");
+
   // `null` while the first read is in flight, so "not loaded yet" and "nobody
   // has been drafted yet" stay distinguishable — the same reason the board keeps
   // them apart rather than showing a confident zero before it knows anything.
   const [drafted, setDrafted] = useState<Set<string> | null>(null);
   const plot = useRef<HTMLDivElement>(null);
+
+  // Read in an effect and never during render. Touching `localStorage` while
+  // rendering makes the server's HTML and the client's first pass disagree, and
+  // this app has already lost two sessions to hydration failures that were
+  // announced in the console and nowhere else.
+  useEffect(() => {
+    const stored = Number(window.localStorage.getItem(SEAT_KEY));
+    if (Number.isInteger(stored) && stored >= 1 && stored <= LEAGUE_TEAMS) setSeat(stored);
+  }, []);
+
+  const chooseSeat = useCallback((value: number | null) => {
+    setSeat(value);
+    if (value == null) window.localStorage.removeItem(SEAT_KEY);
+    else window.localStorage.setItem(SEAT_KEY, String(value));
+  }, []);
 
   const load = useCallback(() => {
     // Read-only here, so there is no pending-write ref to merge over the result:
@@ -140,12 +217,42 @@ export function Chart({
     [model, drafted, hideDrafted, positions, maxCost],
   );
 
-  // Sorted richest-residual first, which is both the labelling order and the
-  // order the rail's "best available" reads in.
-  const ranked = useMemo(
-    () => [...scoped.dots].sort((a, b) => b.residual - a.residual),
-    [scoped.dots],
+  /**
+   * Where the next pick is, as far as anything can know.
+   *
+   * A seat beats a round because it is strictly more information: it collapses a
+   * twelve-wide window to one number, and the room's own pace supplies the rest.
+   * Without one the round is all there is, and that is the state this screen
+   * spends almost its whole life in — the seat is drawn moments before the first
+   * pick.
+   */
+  const target: PickTarget | null = useMemo(() => {
+    if (seat != null) {
+      const pick = nextPick(seat, drafted?.size ?? 0);
+      if (pick != null) return { kind: "pick", pick };
+    }
+    return round == null ? null : roundWindow(round);
+  }, [seat, drafted, round]);
+
+  /**
+   * The rail's order, which is also the labelling order.
+   *
+   * One ranking feeding both, deliberately: a rail headed "best available" and a
+   * plot naming six *different* players as the bargains would be two answers to
+   * one question. Labels are already the one thing on this screen allowed to
+   * change as the room picks — see `LABEL_GAP_X` — and which dots are worth
+   * naming is exactly what a drafter wants updated.
+   *
+   * It reorders and filters. No coordinate is computed here or anywhere
+   * downstream of here; `lib/value.test.ts` asserts that across every mode and
+   * target.
+   */
+  const rail = useMemo(
+    () => rankRail(scoped.dots, { mode: railMode, target }),
+    [scoped.dots, railMode, target],
   );
+
+  const ranked = useMemo(() => rail.entries.map((entry) => entry.dot), [rail]);
 
   const labelled = useMemo(() => {
     const placed: Dot[] = [];
@@ -297,7 +404,86 @@ export function Chart({
             Hide drafted{draftedCount > 0 ? ` (${draftedCount})` : ""}
           </button>
         </div>
+
+        {/* The round is the input and the seat is a refinement, not the other
+            way round: a seat is drawn moments before the first pick, so every
+            prep session this screen will ever see happens without one. */}
+        <div className="control-group">
+          <span className="lbl">
+            <Tip hint="Which round you are asking about. Without a seat that is all anyone can know — a round is twelve picks and which of them is yours depends on where you sit, so the odds below are averaged across the whole round.">
+              Your pick
+            </Tip>
+          </span>
+          <select
+            className="mkt-select"
+            aria-label="Round"
+            value={seat != null ? "" : (round ?? "")}
+            disabled={seat != null}
+            onChange={(event) =>
+              setRound(event.target.value === "" ? null : Number(event.target.value))
+            }
+          >
+            <option value="">Any round</option>
+            {Array.from({ length: ROUNDS }, (_, index) => index + 1).map((value) => (
+              <option key={value} value={value}>
+                Round {value}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Twelve buttons and not a text field, because of when this gets used:
+            seconds before the first pick, in a two-hour high-stress window. Same
+            reasoning as the board's toggle column over a draft mode. */}
+        <div className="control-group">
+          <span className="lbl">
+            <Tip hint="Your seat in the draft order, set once when the order is drawn. With it the app knows exactly when you are next up — a snake makes that wildly seat-dependent, since at the turn you wait twenty-two picks and then pick twice. It is remembered on this device only.">
+              Seat
+            </Tip>
+          </span>
+          {Array.from({ length: LEAGUE_TEAMS }, (_, index) => index + 1).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className="chip mkt-seat"
+              aria-pressed={seat === value}
+              onClick={() => chooseSeat(seat === value ? null : value)}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+
+        <div className="control-group">
+          <span className="lbl">Rail</span>
+          {(Object.keys(RAIL_MODES) as RailMode[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className="chip"
+              aria-pressed={railMode === key}
+              disabled={target == null}
+              onClick={() => setRailMode(key)}
+            >
+              {RAIL_MODES[key].label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Said outright rather than left for the reader to notice, because the
+          rail looks identical either way and the difference is the whole point
+          of the two controls above it. */}
+      {target == null ? (
+        <p className="mkt-why">
+          The rail is ranked by value at any price, which is the best answer to
+          &ldquo;who is underpriced&rdquo; and the wrong one to &ldquo;who can I
+          still get&rdquo;. Choose a round — or set your seat — and it ranks by
+          what will still be there when you are up. Until then the two rail
+          orderings are the same thing, so they are turned off rather than
+          offered as a choice that does nothing.
+        </p>
+      ) : null}
 
       {/* Said plainly, because the default hides two thirds of the priced names
           and a reader who does not know that will think players are missing. */}
@@ -462,7 +648,14 @@ export function Chart({
           </p>
         </div>
 
-        <Rail model={scoped} ranked={ranked} vertical={vertical} />
+        <Rail
+          model={scoped}
+          rail={rail}
+          vertical={vertical}
+          target={target}
+          mode={railMode}
+          seat={seat}
+        />
       </div>
     </section>
   );
@@ -521,12 +714,18 @@ function Readout({ dot, vertical }: { dot: Dot; vertical: Vertical }) {
  */
 function Rail({
   model,
-  ranked,
+  rail,
   vertical,
+  target,
+  mode,
+  seat,
 }: {
   model: ValueModel;
-  ranked: Dot[];
+  rail: { entries: RailEntry[]; excluded: number };
   vertical: Vertical;
+  target: PickTarget | null;
+  mode: RailMode;
+  seat: number | null;
 }) {
   const grouped = useMemo(() => {
     const out = new Map<Reason, ValuePlayer[]>();
@@ -544,26 +743,75 @@ function Rail({
   return (
     <aside className="mkt-rail">
       <div className="mkt-rail-block">
-        <h2 className="mkt-rail-head">Best available</h2>
+        {/* The heading names the question the list is answering. "Best
+            available" with nothing chosen was the original defect: it promised
+            availability and ranked on value alone. */}
+        <h2 className="mkt-rail-head">
+          {target == null
+            ? "Best value"
+            : target.kind === "pick"
+              ? `Best at pick ${target.pick}`
+              : `Best in round ${Math.ceil(target.to / LEAGUE_TEAMS)}`}
+        </h2>
+
         <ol className="mkt-list">
-          {ranked.slice(0, 10).map((dot) => (
-            <li key={dot.player.player_id} className="mkt-item">
-              <Link className="mkt-item-name" href={`/player/${dot.player.player_id}`}>
-                {dot.player.name}
+          {rail.entries.slice(0, 10).map((entry) => (
+            <li key={entry.dot.player.player_id} className="mkt-item">
+              <Link className="mkt-item-name" href={`/player/${entry.dot.player.player_id}`}>
+                {entry.dot.player.name}
               </Link>
               <span className="mkt-item-meta">
-                {dot.player.position ?? "—"} · {f1(dot.player.adp)}
+                {entry.dot.player.position ?? "—"} · {f1(entry.dot.player.adp)}
+                {entry.survival == null ? null : (
+                  <>
+                    {" · "}
+                    {/* The odds sit beside the price because they are a fact
+                        about the price. A step-function estimate is marked, so a
+                        confident-looking 100% built from no dispersion at all is
+                        not read as the same number as a modelled one. */}
+                    <span className="mkt-odds" title={oddsTitle(entry)}>
+                      {Math.round(entry.survival * 100)}%{entry.basis === "step" ? "*" : ""}
+                    </span>
+                  </>
+                )}
               </span>
-              <span className={`mkt-item-num ${dot.residual >= 0 ? "up" : "down"}`}>
-                {signedDelta(Number(dot.residual.toFixed(1)))}
+              <span className={`mkt-item-num ${entry.dot.residual >= 0 ? "up" : "down"}`}>
+                {signedDelta(Number(entry.dot.residual.toFixed(1)))}
               </span>
             </li>
           ))}
         </ol>
+
         <p className="mkt-rail-note">
           Ranked by {VERTICALS[vertical].label.toLowerCase()} against the field at
           the same price. Follows the scope above.
+          {target == null ? null : (
+            <>
+              {" "}
+              {mode === "value"
+                ? "Value ranks on that alone; the percentage is his chance of still being there."
+                : "Expected ranks on that discounted by his chance of still being there."}
+            </>
+          )}
         </p>
+
+        {/* Never a silent cap. A list that quietly shortens is indistinguishable
+            from a shorter board, and this one shortens by design. */}
+        {rail.excluded > 0 ? (
+          <p className="mkt-rail-note">
+            <Tip hint="These players are ranked highly on value but cannot realistically last until your pick, so a list headed by where you are picking would be lying about them. Switch the rail to Best expected to see them ranked down rather than removed.">
+              {rail.excluded} hidden as good as gone
+            </Tip>
+          </p>
+        ) : null}
+
+        {seat != null ? (
+          <p className="mkt-rail-note">
+            Seat {seat}, so your picks are{" "}
+            {seatPicks(seat).slice(0, 3).join(", ")}&hellip; — remembered on this
+            device only.
+          </p>
+        ) : null}
       </div>
 
       <div className="mkt-rail-block">
