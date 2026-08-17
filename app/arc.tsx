@@ -32,10 +32,25 @@ import { AXIS_MAX, CEILING, FLOOR } from "@/lib/board";
  */
 const WEEK_MAX = 18;
 
-/** Coordinate space. The SVG scales; these are not pixels. */
-const W = 720;
-const H = 150;
-const PAD = { top: 10, right: 10, bottom: 20, left: 28 };
+/**
+ * Coordinate space. The SVG scales uniformly, so these are not pixels — and
+ * the ratio between them decides two things at once: how tall the chart
+ * renders, and how big its labels come out.
+ *
+ * Sized against the width this actually gets. `.shell` is max-width 90rem, so
+ * the career panel's plot area is about 1330px on a desktop. At 1080 units
+ * wide that is a scale of ~1.23, which puts the chart near 200px tall with
+ * 10-unit labels at ~12px — the size of the mono labels everywhere else.
+ *
+ * The first version was 720x150. At the same width that scaled by 1.85 and
+ * produced a ~290px chart with 20px axis labels, larger than anything else on
+ * the page and taller than the eight stat tiles above it put together. The
+ * chart is supporting evidence for the row it sits under; a wide, short
+ * viewBox is what keeps it that.
+ */
+const W = 1080;
+const H = 160;
+const PAD = { top: 10, right: 12, bottom: 24, left: 34 };
 
 const PLOT_W = W - PAD.left - PAD.right;
 const PLOT_H = H - PAD.top - PAD.bottom;
@@ -47,7 +62,14 @@ const y = (points: number) =>
 /** Week labels. Every week is too many at this width; these are the quarters. */
 const WEEK_TICKS = [1, 5, 9, 13, 18];
 
-/** Horizontal rules. 10 and 20 mean something; the rest are for reading height. */
+/**
+ * Horizontal rules, all of them labelled.
+ *
+ * 10 and 20 are the floor and ceiling thresholds and are drawn firmer, but the
+ * rest need their numbers too: on a fixed 0-56 axis a 55-point week is most of
+ * the chart's height, and with only 10 and 20 marked there was nothing to read
+ * that spike against.
+ */
 const GRID = [10, 20, 30, 40, 50];
 
 type Point = { week: number; points: number };
@@ -147,16 +169,19 @@ export function Arc({
           />
         ))}
 
-        {/* The two numbers on the scale that mean something beyond their value,
-            labelled; the rest are unlabelled rules you read height against. */}
-        {[FLOOR, CEILING].map((value) => (
-          <text key={value} className="arc-ylab" x={PAD.left - 6} y={y(value)}>
+        {GRID.map((value) => (
+          <text
+            key={value}
+            className={`arc-ylab${value === CEILING || value === FLOOR ? " th" : ""}`}
+            x={PAD.left - 7}
+            y={y(value)}
+          >
             {value}
           </text>
         ))}
 
         {WEEK_TICKS.map((week) => (
-          <text key={week} className="arc-xlab" x={x(week)} y={H - 6}>
+          <text key={week} className="arc-xlab" x={x(week)} y={H - 5}>
             {week}
           </text>
         ))}
@@ -200,7 +225,7 @@ export function Arc({
             }`}
             cx={x(point.week)}
             cy={y(point.points)}
-            r={point.points >= CEILING ? 5 : 4}
+            r={point.points >= CEILING ? 4.2 : 3.4}
           >
             <title>
               week {point.week} · {point.points.toFixed(1)}

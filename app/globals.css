@@ -1670,7 +1670,7 @@ table.log td.z {
 }
 
 .comp-gross {
-  color: var(--faint);
+  color: var(--muted);
   margin-left: auto;
   text-transform: none;
   letter-spacing: 0.02em;
@@ -1712,12 +1712,21 @@ table.log td.z {
   stroke: var(--firm);
 }
 
+/* Sized in viewBox units, not pixels — the SVG scales, so these are multiplied
+   by roughly 1.23 at the width the career panel gets. 10 units lands at ~12px,
+   which is the size of the mono labels everywhere else on the page. */
 .arc-ylab,
 .arc-xlab {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   fill: var(--faint);
   letter-spacing: 0.05em;
+}
+
+/* The floor and ceiling thresholds, the two numbers on the scale that mean
+   something beyond their own value — same treatment they get on .axis. */
+.arc-ylab.th {
+  fill: var(--dim);
 }
 
 .arc-ylab {
@@ -1731,17 +1740,21 @@ table.log td.z {
 
 /* The median, in the one accent the palette spends on it. Dashed so it reads
    as a reference rather than as another week of football. */
+/* The median. Amber because that is what amber means here, but quiet: it is a
+   reference line, and at full width a bold dash competes with the season it is
+   supposed to be a reference for. Finer dashes and a thinner stroke than the
+   first version, which read as a second data series. */
 .arc-med {
   stroke: var(--amber);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 4;
-  opacity: 0.75;
+  stroke-width: 1;
+  stroke-dasharray: 2.5 4;
+  opacity: 0.55;
 }
 
 .arc-line {
   fill: none;
   stroke: var(--tm, var(--tm-none));
-  stroke-width: 2.5;
+  stroke-width: 1.8;
   stroke-linejoin: round;
   stroke-linecap: round;
   opacity: 0.85;
@@ -1752,8 +1765,8 @@ table.log td.z {
 .arc-gap {
   fill: none;
   stroke: var(--tm, var(--tm-none));
-  stroke-width: 1.5;
-  stroke-dasharray: 3 5;
+  stroke-width: 1.3;
+  stroke-dasharray: 2.5 4;
   opacity: 0.3;
 }
 
@@ -1765,7 +1778,7 @@ table.log td.z {
 
 .arc-dot.hi {
   opacity: 1;
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--tm, var(--good)) 60%, transparent));
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--tm, var(--good)) 55%, transparent));
 }
 
 .arc-dot.lo {

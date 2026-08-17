@@ -84,9 +84,11 @@ export function Composition({
             }}
             title={`${share.label} · ${f1(share.points)} points · ${pc(share.share)}`}
           >
-            {/* Labelled inside only when the segment can hold the words.
-                A clipped label is worse than a tooltip. */}
-            {share.share >= 0.13 ? (
+            {/* Labelled inside only when the segment can hold the words. At
+                the width this bar gets, 6% is around 110px — room for "8% REC
+                TD" and then some. The first threshold was 13%, which left a
+                perfectly wide segment blank and reading as a stub. */}
+            {share.share >= 0.06 ? (
               <span className="comp-lab">
                 <b>{pc(share.share)}</b>
                 {share.label}
