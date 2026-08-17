@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { CEILING, type PositionContext, type SeasonRow } from "@/lib/board";
+import { CEILING, type DraftValue, type PositionContext, type SeasonRow } from "@/lib/board";
 import { Arc } from "../../arc";
 import { GameLog } from "../../game-log";
 import { Axis, Plot } from "../../plot";
@@ -28,6 +28,7 @@ export function Career({
   name,
   seasons,
   context,
+  value,
   tone = "",
 }: {
   playerId: string;
@@ -35,6 +36,8 @@ export function Career({
   seasons: SeasonRow[];
   /** One row per season of this career, from `position_context()`. */
   context: PositionContext[];
+  /** What the market asked, per season, from `draft_value()`. Sparse. */
+  value: DraftValue[];
   /** The player's `tm-*` class. One player, one hue, on every season row. */
   tone?: string;
 }) {
@@ -44,6 +47,7 @@ export function Career({
 
   // Keyed by season so each row can find its own field without a scan per row.
   const field = new Map(context.map((row) => [row.season, row]));
+  const price = new Map(value.map((row) => [row.season, row]));
 
   if (seasons.length === 0) {
     return (
@@ -69,14 +73,18 @@ export function Career({
         {/* The shading is a new mark on a plot readers already know, so it is
             named here rather than left to be worked out from a tooltip. */}
         <span className="board-sub">
-          shaded band = the startable field at his position · click a season to open
-          its game log
+          cost = where he was drafted at his position · shaded band = the startable
+          field · click a season to open its game log
         </span>
       </div>
 
       <div className="grid">
         <div className="r r-season r-head">
           <div>Season</div>
+          {/* Cost then rank, in that order, because that is the order the
+              season happened in: the price was set in August and the finish
+              was the answer to it. */}
+          <div>Cost</div>
           <div>Rank</div>
           <div>G</div>
           <div>Total</div>
@@ -101,6 +109,7 @@ export function Career({
                 <span className="who">
                   <span className="n">{season.season}</span>
                 </span>
+                <Cost value={price.get(season.season)} />
                 <Rank context={field.get(season.season)} />
                 <span className="num dim">{season.games}</span>
                 <span className="num dim">{f1(season.total)}</span>
@@ -148,6 +157,47 @@ export function Career({
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * What the market asked for him that August, as a positional slot.
+ *
+ * Set beside the finish rank and in the same form — "RB4" against "RB1" — so
+ * the pair reads without converting between an overall pick number and a
+ * positional result. The ADP itself, and how many drafts it came from, go in
+ * the title: 2.4 is the number every other source prints, and 336 drafts
+ * against 8,470 is the difference between a price and an anecdote.
+ *
+ * Dimmed against the rank beside it, deliberately. The two are not equals: one
+ * is what happened and one is what was guessed beforehand.
+ *
+ * NO VERDICT IS DRAWN. It would be easy to colour a season green where the
+ * finish beat the price, and it is the same mistake the IQR column and the
+ * compare page both refuse to make — the delta is right there for a reader who
+ * wants it, and a back who returned RB6 on an RB2 price had a fine season that
+ * an arrow pointing down would call a failure.
+ *
+ * An empty cell is a fact: he was not worth drafting that year, or the season
+ * predates 2012. It is not a gap in the data, so it renders as an em dash like
+ * every other honest absence on this screen rather than as nothing at all.
+ */
+function Cost({ value }: { value: DraftValue | undefined }) {
+  if (!value) return <span className="num dim">&mdash;</span>;
+
+  const drafts =
+    value.times_drafted == null
+      ? ""
+      : ` · from ${value.times_drafted.toLocaleString("en-GB")} drafts`;
+
+  return (
+    <span
+      className="num cost"
+      title={`Drafted ${value.rank} of ${value.pool} ${value.position}s with a price · ADP ${value.adp.toFixed(1)}${drafts}`}
+    >
+      {value.position}
+      {value.rank}
+    </span>
   );
 }
 

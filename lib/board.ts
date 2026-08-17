@@ -160,6 +160,38 @@ export type PositionContext = {
   p75: number | null;
 };
 
+/**
+ * One row of `draft_value()` — what the market asked for a player, for one
+ * season of his career.
+ *
+ * The price is carried as a *positional* rank rather than as the ADP, so it
+ * compares directly with `PositionContext.rank` beside it: "drafted WR8,
+ * finished WR3" needs no conversion between an overall pick number and a
+ * positional finish. `adp` comes along for the title, because it is the number
+ * every other source prints.
+ *
+ * `pool` is deliberately not `PositionContext.cohort`. This one counts the
+ * players at that position who carried a price; that one counts the players a
+ * league of this size starts. They are different denominators for different
+ * questions and forcing them to agree would flatten a bust — see the note in
+ * migration 0009.
+ *
+ * `position` may differ from the one in `PositionContext` for the same season.
+ * That is the market's label against what he actually played, and it is a fact
+ * about the season rather than a mismatch to reconcile.
+ */
+export type DraftValue = {
+  player_id: string;
+  season: number;
+  position: string;
+  adp: number;
+  rank: number;
+  pool: number;
+  /** How many drafts the number is drawn from. 303 in 2012, 8,470 in 2025. */
+  times_drafted: number | null;
+  stdev: number | null;
+};
+
 /** One row of `scored_weekly_stats`, as returned by `player_week_log()`. */
 export type WeekRow = {
   player_id: string;

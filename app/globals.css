@@ -805,6 +805,14 @@ code {
   min-width: 62rem;
 }
 
+/* The career table carries one column the board does not — the draft cost — so
+   it needs that column's width on top before the plot starts being squeezed.
+   Scoped to `.career` rather than raised on `.grid`, which the board and the
+   pickers share and which has no cost column to make room for. */
+.career .grid {
+  min-width: 66rem;
+}
+
 /* stripe | rank | player | adp | median | iqr | 20+ | plot | chevron
    `POS` is gone as a column: it was duplicated in the line under every name,
    which put "RB" directly left of "RB · DET · 17g". */
@@ -918,8 +926,18 @@ code {
 }
 
 /* season | rank | G | total | median | iqr | 20+ | best | plot | chevron */
+/* season | cost | rank | G | total | median | IQR | 20+ | best | plot | chev */
 .r-season {
-  grid-template-columns: 5rem 4rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+  grid-template-columns: 5rem 4rem 4rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+}
+
+/* The price, beside the result it was a guess at. Dimmed against `.rank`
+   because the two are not equals — one is what happened, the other is what the
+   market thought would happen — and the row should read result-first even
+   though the columns run cost-first. */
+.cost {
+  color: var(--muted);
+  font-weight: 500;
 }
 
 /* Position rank. Set in ink rather than dimmed like the counts beside it: it

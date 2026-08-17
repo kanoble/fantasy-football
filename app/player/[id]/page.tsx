@@ -39,7 +39,7 @@ export default async function PlayerPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { cards, seasons, context, freshness, isMember } = await fetchPlayer(id);
+  const { cards, seasons, context, value, freshness, isMember } = await fetchPlayer(id);
 
   if (!isMember) {
     return (
@@ -120,6 +120,7 @@ export default async function PlayerPage({
         name={card.name}
         seasons={seasons}
         context={context}
+        value={value}
         tone={tone}
       />
     </main>

@@ -133,10 +133,8 @@ export default async function ComparePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ cards, seasons, context, isMember }, { options, freshness }] = await Promise.all([
-    fetchPlayers(wanted),
-    fetchPlayerOptions(),
-  ]);
+  const [{ cards, seasons, context, value, isMember }, { options, freshness }] =
+    await Promise.all([fetchPlayers(wanted), fetchPlayerOptions()]);
 
   // The stat season's field, per player. This is the screen where it matters
   // most: comparing a back with a receiver on raw points compares two
@@ -144,6 +142,14 @@ export default async function ComparePage({
   // above the field he is actually drafted out of.
   const field = new Map(
     context.filter((row) => row.season === STAT_SEASON).map((row) => [row.player_id, row]),
+  );
+
+  // What each was drafted at for the same season, so the two rows read as a
+  // pair: what he cost, then what he returned. Same season as the field above
+  // and not the one being drafted now — the point of the pair is that both
+  // halves describe one completed season.
+  const cost = new Map(
+    value.filter((row) => row.season === STAT_SEASON).map((row) => [row.player_id, row]),
   );
 
   if (!isMember) {
@@ -273,6 +279,20 @@ export default async function ComparePage({
                     </tr>
                   );
                 })}
+                <tr>
+                  <th scope="row">{STAT_SEASON} draft cost</th>
+                  {cards.map((card) => {
+                    const row = cost.get(card.player_id);
+                    return (
+                      // Never a win either, and for a stronger reason than the
+                      // rank below: being drafted earlier is not being better.
+                      // It is the number the row underneath is the answer to.
+                      <td key={card.player_id}>
+                        {row ? `${row.position}${row.rank} of ${row.pool}` : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
                 <tr>
                   <th scope="row">{STAT_SEASON} position rank</th>
                   {cards.map((card) => {
