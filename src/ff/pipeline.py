@@ -149,6 +149,17 @@ def build_player_index(seasons: list[int]) -> pl.DataFrame:
         pl.col("position"),
         pl.col("team"),
         pl.col("season").alias("latest_season"),
+        # The bio columns ride along unchanged. This table is rebuilt whole on
+        # every refresh (replace_table below), so adding a column here needs no
+        # backfill — the next cron run fills it for all 10,000 rows.
+        pl.col("headshot_url"),
+        pl.col("birth_date"),
+        pl.col("college"),
+        pl.col("jersey_number"),
+        pl.col("years_exp"),
+        pl.col("draft_number"),
+        pl.col("draft_club"),
+        pl.col("rookie_year"),
     )
 
 

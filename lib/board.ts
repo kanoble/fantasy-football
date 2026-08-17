@@ -84,6 +84,27 @@ export type BoardRow = {
 };
 
 /**
+ * Who a player is, as opposed to how he scores.
+ *
+ * Carried by `player_cards()` and deliberately not by `draft_board()`: the
+ * board renders 923 rows and would ship eight more columns per row to draw
+ * none of them. Every field is nullable because every one of them is genuinely
+ * missing for somebody — and `draft_number` is null for every undrafted free
+ * agent, where the null *is* the fact rather than a gap in the data.
+ */
+export type PlayerBio = {
+  headshot_url: string | null;
+  /** ISO date. Rendered as an age, which is the form a drafter thinks in. */
+  birth_date: string | null;
+  college: string | null;
+  jersey_number: number | null;
+  years_exp: number | null;
+  draft_number: number | null;
+  draft_club: string | null;
+  rookie_year: number | null;
+};
+
+/**
  * One row of `player_cards()`, which returns `draft_board()`'s shape for a
  * named set of players rather than for the whole ADP list.
  *
@@ -93,8 +114,12 @@ export type BoardRow = {
  * nullable because an ADP name can resolve to nobody; a card is built outward
  * from `player_index`, where the id is the primary key, so it always has one.
  * That is why the card routes never render an `unmatched` state.
+ *
+ * Bio is added here rather than to `BoardRow` for the reason above: extending
+ * the shared type would have put a headshot URL on every board row, which is
+ * both wasted payload and the first step toward putting faces on the board.
  */
-export type PlayerCard = Omit<BoardRow, "player_id"> & { player_id: string };
+export type PlayerCard = Omit<BoardRow, "player_id"> & { player_id: string } & PlayerBio;
 
 /** One row of `player_seasons()` — a single season of one player's career. */
 export type SeasonRow = {
@@ -110,6 +135,29 @@ export type SeasonRow = {
   best: number | null;
   weeks: number[] | null;
   points: number[] | null;
+};
+
+/**
+ * One row of `position_context()` — where a player sat among startable players
+ * at his position, for one season of his career.
+ *
+ * The denominator the fixed axis never had. A 14.2 median is either an
+ * excellent running back or a replaceable one, and until this the app had no
+ * way to say which. `rank` may exceed `cohort` — "RB41 of 24" is a real answer
+ * about a season outside the startable pool, and suppressing it would blank
+ * exactly the seasons carrying the worst news.
+ */
+export type PositionContext = {
+  player_id: string;
+  season: number;
+  position: string;
+  rank: number;
+  /** How many players at this position a league of this size starts. */
+  cohort: number;
+  /** Weekly quartiles across the cohort — the field, in the same units. */
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
 };
 
 /** One row of `scored_weekly_stats`, as returned by `player_week_log()`. */
@@ -213,6 +261,37 @@ export function draftCountdown(now: number = Date.now()): string | null {
   if (days === 0) return "draft today";
   if (days === 1) return "draft tomorrow";
   return `draft in ${days} days`;
+}
+
+/**
+ * Age in whole years, or null if the birth date is missing or unreadable.
+ *
+ * Whole years because that is the only precision a drafter uses — "27" is a
+ * fact about a running back's remaining career and "27.4" is noise. Computed
+ * from today rather than from the draft date: the two differ by at most a
+ * fortnight and the first is what every other source prints, so matching them
+ * avoids an off-by-one argument nobody wants to have mid-draft.
+ *
+ * All arithmetic in UTC, matching `draftCountdown` — the family is spread
+ * across several zones and a birthday should not land on different days for
+ * different readers.
+ */
+export function ageFrom(birthDate: string | null, now: number = Date.now()): number | null {
+  if (!birthDate) return null;
+
+  const born = new Date(`${birthDate.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(born.getTime())) return null;
+
+  const today = new Date(now);
+  let age = today.getUTCFullYear() - born.getUTCFullYear();
+
+  // Not yet had this year's birthday.
+  const month = today.getUTCMonth() - born.getUTCMonth();
+  if (month < 0 || (month === 0 && today.getUTCDate() < born.getUTCDate())) age -= 1;
+
+  // A negative or implausible age means the date is wrong, not that the player
+  // is unborn. Better to show nothing than a number that is visibly nonsense.
+  return age >= 0 && age < 70 ? age : null;
 }
 
 /**

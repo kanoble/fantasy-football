@@ -60,12 +60,34 @@ class AmbiguousPlayerError(LookupError):
         super().__init__(f"{query!r} is ambiguous — matches: {listed}")
 
 
+#: Roster columns that describe the *player* rather than his current job.
+#:
+#: These do not change when he is traded, and several of them are missing from
+#: any single season's file — ``headshot_url`` is null for 92 of 3,137 rows in
+#: 2025 alone. So they are folded with "last non-null wins" rather than "latest
+#: season wins": a player whose newest roster row happens to lack a portrait
+#: keeps the one an earlier season had, which is the same portrait.
+BIO_COLUMNS = (
+    "headshot_url",
+    "birth_date",
+    "college",
+    "draft_number",
+    "draft_club",
+    "rookie_year",
+)
+
+#: Roster columns that describe his *current* job, where a later season is not
+#: merely a fallback but the actual answer.
+CURRENT_COLUMNS = ("name", "position", "team", "jersey_number", "years_exp")
+
+
 def player_index(seasons: list[int]) -> pl.DataFrame:
     """Build the searchable player universe for ``seasons``.
 
     Returns one row per player with ``gsis_id``, ``name``, ``norm_name``,
-    ``position``, ``team``, and the latest ``season`` they appear in. Later
-    seasons win, so a traded player shows their most recent team.
+    ``position``, ``team``, the latest ``season`` they appear in, and the bio
+    columns in :data:`BIO_COLUMNS`. Later seasons win for the columns that
+    describe a current job; see :data:`BIO_COLUMNS` for why the rest differ.
     """
     frames: list[pl.DataFrame] = []
     for season in sorted(seasons):
@@ -76,6 +98,7 @@ def player_index(seasons: list[int]) -> pl.DataFrame:
         cols = {"gsis_id", "full_name", "position", "team"}
         if not cols.issubset(set(roster.columns)):
             continue
+        available = set(roster.columns)
         frames.append(
             roster.select(
                 pl.col("gsis_id"),
@@ -83,7 +106,20 @@ def player_index(seasons: list[int]) -> pl.DataFrame:
                 pl.col("position"),
                 pl.col("team"),
                 pl.lit(season).alias("season"),
-            ).filter(pl.col("gsis_id").is_not_null())
+                # Selected by name rather than assumed present: nflverse has
+                # added and renamed roster columns before, and a season file
+                # missing one should cost that column, not the whole season.
+                *(
+                    pl.col(column) if column in available else pl.lit(None).alias(column)
+                    for column in BIO_COLUMNS + CURRENT_COLUMNS
+                    if column not in {"name", "position", "team"}
+                ),
+            ).filter(
+                # An empty gsis_id is not a null one. Rosters carry a handful of
+                # each, and `is_not_null` alone lets the empty string through to
+                # become a row keyed on "" — a player page for nobody.
+                pl.col("gsis_id").is_not_null() & (pl.col("gsis_id") != "")
+            )
         )
 
     if not frames:
@@ -93,7 +129,11 @@ def player_index(seasons: list[int]) -> pl.DataFrame:
     return (
         combined.sort("season")
         .group_by("gsis_id")
-        .last()
+        .agg(
+            pl.col("season").last(),
+            *(pl.col(column).last() for column in CURRENT_COLUMNS),
+            *(pl.col(column).drop_nulls().last() for column in BIO_COLUMNS),
+        )
         .with_columns(
             pl.col("name").map_elements(normalize_name, return_dtype=pl.Utf8).alias("norm_name")
         )

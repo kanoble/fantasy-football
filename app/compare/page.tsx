@@ -133,10 +133,18 @@ export default async function ComparePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [{ cards, seasons, isMember }, { options, freshness }] = await Promise.all([
+  const [{ cards, seasons, context, isMember }, { options, freshness }] = await Promise.all([
     fetchPlayers(wanted),
     fetchPlayerOptions(),
   ]);
+
+  // The stat season's field, per player. This is the screen where it matters
+  // most: comparing a back with a receiver on raw points compares two
+  // different jobs, and the only honest head-to-head is how far each one sits
+  // above the field he is actually drafted out of.
+  const field = new Map(
+    context.filter((row) => row.season === STAT_SEASON).map((row) => [row.player_id, row]),
+  );
 
   if (!isMember) {
     return (
@@ -223,6 +231,7 @@ export default async function ComparePage({
                       median={card.median}
                       q1={card.q1}
                       q3={card.q3}
+                      field={field.get(card.player_id) ?? null}
                       empty={
                         state === "rookie"
                           ? "no NFL games played"
@@ -264,6 +273,22 @@ export default async function ComparePage({
                     </tr>
                   );
                 })}
+                <tr>
+                  <th scope="row">{STAT_SEASON} position rank</th>
+                  {cards.map((card) => {
+                    const row = field.get(card.player_id);
+                    return (
+                      // Deliberately never marked as a win. RB3 of 24 and QB1
+                      // of 12 are ranks in differently sized pools, and
+                      // crowning one would be comparing two numbers that are
+                      // not on the same scale — the mistake the IQR row above
+                      // exists to avoid.
+                      <td key={card.player_id}>
+                        {row ? `${row.position}${row.rank} of ${row.cohort}` : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
                 <tr>
                   <th scope="row">Seasons played</th>
                   {cards.map((card) => (

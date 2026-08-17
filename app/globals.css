@@ -416,6 +416,82 @@ code {
   color: var(--muted);
 }
 
+/* The two bio lines on a player page.
+   `.ctx` is a <p>, so these are spans made block rather than divs — a div
+   inside a paragraph is invalid and React will not warn about it. */
+.bio-now,
+.bio-then {
+  display: block;
+}
+
+/* Where he came from, set one step back from what he is now: fixed for life
+   and read once, against a line that changes every season. */
+.bio-then {
+  margin-top: 0.2rem;
+  /* --faint rather than an opacity on --muted: the palette already encodes
+     this step and it is tuned separately for the two grounds, which an opacity
+     multiplier cannot be. */
+  color: var(--faint);
+  text-transform: none;
+  letter-spacing: 0.06em;
+}
+
+/* ---------------------------------------------------------------------------
+   The portrait.
+
+   96px, one size everywhere, which is what keeps a player to a single Vercel
+   image cache key — see next.config.ts. Square rather than round: these are
+   NFL studio portraits shot with headroom, and a circular mask crops the top
+   of the helmet off about a third of them.
+   --------------------------------------------------------------------------- */
+.portrait {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-hi);
+  /* The team hue again, as a hairline rather than a fill: the page-bar beside
+     it is already carrying the colour, and two solid blocks of it would fight. */
+  box-shadow: inset 0 0 0 1px var(--firm);
+  position: relative;
+}
+
+.portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Portraits are shot head-and-shoulders on a transparent ground; anchoring
+     to the top keeps the face centred when the crop bites. */
+  object-position: 50% 12%;
+  display: block;
+}
+
+/* The 12% with no published portrait. Initials on the team hue, occupying
+   exactly the space the image would, so nothing shifts between the two. */
+.portrait.none {
+  display: grid;
+  place-items: center;
+  font-family: var(--display);
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--tm, var(--tm-none));
+  background: var(--panel-hi);
+}
+
+@media (max-width: 34rem) {
+  /* On a phone the name needs the width more than the face does. */
+  .portrait {
+    width: 64px;
+    height: 64px;
+  }
+
+  .portrait.none {
+    font-size: 1.3rem;
+  }
+}
+
 .page-aside {
   display: flex;
   align-items: center;
@@ -841,9 +917,24 @@ code {
   outline-offset: 1px;
 }
 
-/* season | G | total | median | iqr | 20+ | best | plot | chevron */
+/* season | rank | G | total | median | iqr | 20+ | best | plot | chevron */
 .r-season {
-  grid-template-columns: 5rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+  grid-template-columns: 5rem 4rem 3rem 4.75rem 4.5rem 5.25rem 3.25rem 4rem 1fr 1.75rem;
+}
+
+/* Position rank. Set in ink rather than dimmed like the counts beside it: it
+   is the one figure on the row that says whether the median next to it was
+   any good, which is the question the whole column exists to answer. */
+.rank {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* A season outside the startable pool. Dimmed rather than flagged — finishing
+   RB41 is an ordinary thing that happens to most careers, not an alarm. */
+.rank.out {
+  color: var(--faint);
+  font-weight: 400;
 }
 
 /* player | median | iqr | plot */
@@ -1135,6 +1226,35 @@ code {
 
 .plot .gl.th {
   background: var(--firm);
+}
+
+/* The field: the middle 50% of weekly scores among startable players at this
+   position. Drawn under the gridlines, in no colour of its own — it is the
+   ground the season stands on, not another mark competing with it. If his own
+   band sits right of this one he beat the field; the two medians are the
+   comparison, and neither needs a label to make it. */
+.plot .field {
+  position: absolute;
+  /* Full height on purpose. His own band is inset 0.28rem top and bottom, so
+     the field shows as a taller shaded zone with his solid block sitting
+     inside it — which is what tells the two apart at a glance. */
+  top: 0;
+  bottom: 0;
+  /* Neutral shading rather than --band. --band is the colour of *his* middle
+     50%, and using it here would make the field read as a second, fainter
+     version of the same thing instead of as the ground behind it. */
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+/* The field's median. The one comparison the whole band exists to support is
+   this tick against his amber one, so it is a real mark rather than an edge. */
+.plot .fieldmed {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  margin-left: -0.5px;
+  background: color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
 .plot .band {
@@ -1468,6 +1588,212 @@ table.log td.z {
   white-space: normal;
 }
 
+/* where the points came from ------------------------------------------
+   One bar, segmented by scoring rule, in the player's own team hue at stepped
+   opacity. Never a categorical palette: colour on this app means team, and a
+   second hue language here would be competing with the one the board teaches.
+   Value separates the categories and the hue keeps its meaning. Amber stays
+   out of it — that marks the median and nothing else earns it. */
+
+.comp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.comp-bar {
+  display: flex;
+  /* The gap is the separator. Two adjacent segments a step apart in opacity
+     need an edge between them, and a border would add a colour this bar has
+     deliberately not got. */
+  gap: 2px;
+  height: 2rem;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: inset 0 1px 3px var(--groove-top);
+}
+
+.comp-seg {
+  background: var(--tm, var(--tm-none));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2px;
+  overflow: hidden;
+  transition: opacity 0.15s ease;
+}
+
+.comp-seg:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.comp-seg:last-child {
+  border-radius: 0 2px 2px 0;
+}
+
+/* Knocked out of the segment rather than set on top of it, so the label works
+   against the full-strength first segment and the faint last one alike. */
+.comp-lab {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--panel);
+  white-space: nowrap;
+  padding: 0 0.3rem;
+  mix-blend-mode: luminosity;
+}
+
+.comp-lab b {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Deductions. Past the end of the bar rather than inside it: a lost fumble
+   does not sit beside receiving yards taking up room, it removes some. */
+.comp-deficit {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bad);
+  font-variant-numeric: tabular-nums;
+}
+
+.comp-gross {
+  color: var(--muted);
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comp-seg {
+    transition: none;
+  }
+}
+
+/* the season arc ------------------------------------------------------
+   The same season as the plot on the row above, drawn against time instead of
+   against frequency. Deliberately reuses that plot's vocabulary rather than
+   inventing a second one: team hue for the line, a filled dot for a ceiling
+   week, a hollow ring for a floor week, amber for the median and nothing else.
+   A reader who has learnt the board has nothing new to learn here. */
+
+.arc-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.arc {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.arc-gl {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+/* 10 and 20 — the floor and ceiling thresholds. */
+.arc-gl.th {
+  stroke: var(--firm);
+}
+
+/* Sized in viewBox units, not pixels — the SVG scales, so these are multiplied
+   by roughly 1.23 at the width the career panel gets. 10 units lands at ~12px,
+   which is the size of the mono labels everywhere else on the page. */
+.arc-ylab,
+.arc-xlab {
+  font-family: var(--mono);
+  font-size: 10px;
+  fill: var(--faint);
+  letter-spacing: 0.05em;
+}
+
+/* The floor and ceiling thresholds, the two numbers on the scale that mean
+   something beyond their own value — same treatment they get on .axis. */
+.arc-ylab.th {
+  fill: var(--dim);
+}
+
+.arc-ylab {
+  text-anchor: end;
+  dominant-baseline: middle;
+}
+
+.arc-xlab {
+  text-anchor: middle;
+}
+
+/* The median, in the one accent the palette spends on it. Dashed so it reads
+   as a reference rather than as another week of football. */
+/* The median. Amber because that is what amber means here, but quiet: it is a
+   reference line, and at full width a bold dash competes with the season it is
+   supposed to be a reference for. Finer dashes and a thinner stroke than the
+   first version, which read as a second data series. */
+.arc-med {
+  stroke: var(--amber);
+  stroke-width: 1;
+  stroke-dasharray: 2.5 4;
+  opacity: 0.55;
+}
+
+.arc-line {
+  fill: none;
+  stroke: var(--tm, var(--tm-none));
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+/* Weeks he did not play. Drawn, but drawn as absence — a solid line here would
+   be four weeks of football that never happened. */
+.arc-gap {
+  fill: none;
+  stroke: var(--tm, var(--tm-none));
+  stroke-width: 1.3;
+  stroke-dasharray: 2.5 4;
+  opacity: 0.3;
+}
+
+/* Same three states as .plot .dot, for the same reason. */
+.arc-dot {
+  fill: var(--tm, var(--tm-none));
+  opacity: 0.55;
+}
+
+.arc-dot.hi {
+  opacity: 1;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--tm, var(--good)) 55%, transparent));
+}
+
+.arc-dot.lo {
+  fill: var(--panel);
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+
+.arc-quiet {
+  color: var(--faint);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
 /* the expanded row's footer ------------------------------------------- */
 
 /* Sits directly under the game-log panel and reads as part of it, so the
@@ -1475,6 +1801,19 @@ table.log td.z {
 .panel:has(+ .panel-actions) {
   border-bottom: 0;
   padding-bottom: 0.4rem;
+}
+
+/* Two panels in one expanded season — the arc, then the game log. They are one
+   surface interrupted, not two, so the first drops its rule and the second
+   drops the shadow that would otherwise draw a lip between them. */
+.panel:has(+ .panel) {
+  border-bottom: 0;
+  padding-bottom: 0.5rem;
+}
+
+.panel + .panel {
+  box-shadow: inset 0 -3px 8px -6px var(--shadow);
+  padding-top: 0.5rem;
 }
 
 .panel-actions {

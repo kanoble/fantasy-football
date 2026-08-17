@@ -8,7 +8,9 @@ import { createClient } from "@/lib/supabase/server";
 import { teamClass } from "@/lib/teams";
 import { AppBar, PageHead } from "../../chrome";
 import { NotOnList } from "../../not-on-list";
+import { Bio } from "./bio";
 import { Career } from "./career";
+import { Portrait } from "./portrait";
 
 const f1 = (value: number | null | undefined) =>
   value == null || Number.isNaN(value) ? "—" : value.toFixed(1);
@@ -37,7 +39,7 @@ export default async function PlayerPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { cards, seasons, freshness, isMember } = await fetchPlayer(id);
+  const { cards, seasons, context, freshness, isMember } = await fetchPlayer(id);
 
   if (!isMember) {
     return (
@@ -53,6 +55,9 @@ export default async function PlayerPage({
   if (!card) notFound();
 
   const state = rowState(card);
+  // The stat season's row, for the rank beside the median. A player with no
+  // week that season simply has none, which the tile renders as an em dash.
+  const statSeason = context.find((row) => row.season === STAT_SEASON);
   // The page is about one player, so his team's hue runs down the left of his
   // name — the same hue his row carries on the board.
   const tone = teamClass(card.team);
@@ -63,15 +68,8 @@ export default async function PlayerPage({
       <PageHead
         title={card.name}
         tone={tone}
-        context={
-          <>
-            {card.position ?? "—"} · {card.team ?? "free agent"} ·{" "}
-            {card.career_games} career games
-            {card.injury_status ? (
-              <span className="flagpill q inline">{card.injury_status}</span>
-            ) : null}
-          </>
-        }
+        portrait={<Portrait src={card.headshot_url} name={card.name} />}
+        context={<Bio card={card} />}
         action={
           <Link className="linkish" href={`/compare?ids=${card.player_id}`}>
             Compare
@@ -84,6 +82,17 @@ export default async function PlayerPage({
         <Stat label={`${ADP_SEASON} ADP`} value={card.adp == null ? "undrafted" : f1(card.adp)} />
         <Stat label="Projected" value={f1(card.projected_points)} />
         <Stat label={`${STAT_SEASON} median`} value={f1(card.median)} big />
+        {/* Directly after the median, because it is what makes the median
+            readable. 14.2 is either an excellent back or a replaceable one and
+            the number alone has never said which. */}
+        <Stat
+          label={`${STAT_SEASON} rank`}
+          value={
+            statSeason
+              ? `${statSeason.position}${statSeason.rank}`
+              : "—"
+          }
+        />
         <Stat
           label="Middle 50%"
           value={
@@ -106,7 +115,13 @@ export default async function PlayerPage({
 
       {/* Same hue again: it colours the career table's plots and its expanded
           panels, so the page reads as one player from top to bottom. */}
-      <Career playerId={card.player_id} name={card.name} seasons={seasons} tone={tone} />
+      <Career
+        playerId={card.player_id}
+        name={card.name}
+        seasons={seasons}
+        context={context}
+        tone={tone}
+      />
     </main>
   );
 }

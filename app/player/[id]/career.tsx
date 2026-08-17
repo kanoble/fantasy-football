@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { CEILING, type SeasonRow } from "@/lib/board";
+import { CEILING, type PositionContext, type SeasonRow } from "@/lib/board";
+import { Arc } from "../../arc";
 import { GameLog } from "../../game-log";
 import { Axis, Plot } from "../../plot";
 
@@ -26,17 +27,23 @@ export function Career({
   playerId,
   name,
   seasons,
+  context,
   tone = "",
 }: {
   playerId: string;
   name: string;
   seasons: SeasonRow[];
+  /** One row per season of this career, from `position_context()`. */
+  context: PositionContext[];
   /** The player's `tm-*` class. One player, one hue, on every season row. */
   tone?: string;
 }) {
   // The newest season starts open: it is the one a drafter is asking about, and
   // an all-closed table makes the reader click to see anything at all.
   const [open, setOpen] = useState<number | null>(seasons[0]?.season ?? null);
+
+  // Keyed by season so each row can find its own field without a scan per row.
+  const field = new Map(context.map((row) => [row.season, row]));
 
   if (seasons.length === 0) {
     return (
@@ -59,12 +66,18 @@ export function Career({
           Career · {seasons.length} season{seasons.length === 1 ? "" : "s"}, every week
           scored in league terms
         </span>
-        <span className="board-sub">click a season to open its game log</span>
+        {/* The shading is a new mark on a plot readers already know, so it is
+            named here rather than left to be worked out from a tooltip. */}
+        <span className="board-sub">
+          shaded band = the startable field at his position · click a season to open
+          its game log
+        </span>
       </div>
 
       <div className="grid">
         <div className="r r-season r-head">
           <div>Season</div>
+          <div>Rank</div>
           <div>G</div>
           <div>Total</div>
           <div>Median</div>
@@ -88,6 +101,7 @@ export function Career({
                 <span className="who">
                   <span className="n">{season.season}</span>
                 </span>
+                <Rank context={field.get(season.season)} />
                 <span className="num dim">{season.games}</span>
                 <span className="num dim">{f1(season.total)}</span>
                 <span className="num key">{f1(season.median)}</span>
@@ -102,22 +116,60 @@ export function Career({
                   median={season.median}
                   q1={season.q1}
                   q3={season.q3}
+                  field={field.get(season.season) ?? null}
                 />
                 <span className="chev">&rsaquo;</span>
               </button>
 
               {expanded ? (
-                <GameLog
-                  playerId={playerId}
-                  name={name}
-                  season={season.season}
-                  tone={tone}
-                />
+                <>
+                  {/* Order matters: shape, then arc, then arithmetic. The row
+                      above says how good the season was, this says when, and
+                      the game log under it says how each week was built. */}
+                  <div className={`panel arc-panel ${tone}`}>
+                    <Arc
+                      weeks={season.weeks}
+                      points={season.points}
+                      median={season.median}
+                      season={season.season}
+                      name={name}
+                    />
+                  </div>
+                  <GameLog
+                    playerId={playerId}
+                    name={name}
+                    season={season.season}
+                    tone={tone}
+                  />
+                </>
               ) : null}
             </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Where this season sat among startable players at his position.
+ *
+ * "RB3" alone would be ambiguous about the pool, so the cohort travels with it
+ * in the tooltip. A rank past the cohort is shown rather than hidden — a
+ * season outside the startable pool is a real answer, and blanking it would
+ * empty exactly the rows carrying the worst news.
+ */
+function Rank({ context }: { context: PositionContext | undefined }) {
+  if (!context) return <span className="num dim">&mdash;</span>;
+
+  const inside = context.rank <= context.cohort;
+  return (
+    <span
+      className={`num rank${inside ? "" : " out"}`}
+      title={`${context.rank} of ${context.cohort} startable ${context.position}s that season`}
+    >
+      {context.position}
+      {context.rank}
+    </span>
   );
 }

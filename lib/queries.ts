@@ -11,6 +11,7 @@ import {
   type Freshness,
   type PlayerCard,
   type PlayerOption,
+  type PositionContext,
   type SeasonRow,
 } from "./board";
 import { createClient } from "./supabase/server";
@@ -110,6 +111,14 @@ export type PlayerData = {
   cards: PlayerCard[];
   /** Every season of every requested player, newest first. */
   seasons: SeasonRow[];
+  /**
+   * One row per (player, season) saying where that season sat among startable
+   * players at his position. Same grain as `seasons`, fetched alongside rather
+   * than folded into it: `player_seasons()` is about one player and this is
+   * about the field he was in, and merging them server-side would put a
+   * cohort-wide aggregate inside a function named for a single career.
+   */
+  context: PositionContext[];
   freshness: Freshness | null;
   isMember: boolean;
 };
@@ -131,6 +140,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
     return {
       cards: [],
       seasons: [],
+      context: [],
       freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
       isMember: membership.data === true,
     };
@@ -138,7 +148,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
 
   const supabase = await createClient();
 
-  const [membership, cards, seasons, freshness] = await Promise.all([
+  const [membership, cards, seasons, context, freshness] = await Promise.all([
     supabase.rpc("is_league_member"),
     supabase.rpc("player_cards", {
       p_player_ids: playerIds,
@@ -152,18 +162,24 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
       p_ceiling: CEILING,
       p_floor: FLOOR,
     }),
+    // Left at the function's default league size. The number belongs in SQL
+    // beside the derivation that uses it, not spread across a constant here
+    // and a default there that could drift apart.
+    supabase.rpc("position_context", { p_player_ids: playerIds }),
     supabase.rpc("data_freshness"),
   ]);
 
   if (membership.error) throw membership.error;
   if (cards.error) throw cards.error;
   if (seasons.error) throw seasons.error;
+  if (context.error) throw context.error;
 
   const isMember = membership.data === true;
 
   return {
     cards: isMember ? ((cards.data ?? []) as PlayerCard[]) : [],
     seasons: isMember ? ((seasons.data ?? []) as SeasonRow[]) : [],
+    context: isMember ? ((context.data ?? []) as PositionContext[]) : [],
     freshness: ((freshness.data ?? [])[0] as Freshness | undefined) ?? null,
     isMember,
   };
