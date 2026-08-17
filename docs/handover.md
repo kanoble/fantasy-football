@@ -25,16 +25,22 @@ been the one unexercised path for two sessions. The Yahoo integration is still
 stubbed, pending an API access application that has been submitted and is
 awaiting a decision.
 
+**The app has a name: Noble Family Football.** Founded 2021; the 2026 draft is
+30 August. Until 2026-08-16 the largest words on every screen named a *page*
+("Draft board"), so the product was anonymous — the header pass fixed that and
+rebuilt the navigation around it. See "The header and the brand, as built".
+
 **The design pass is done for the board and merged.** Three directions were
 mocked against live data, one was chosen, and the consolidation it needed — one
 palette instead of three copies — is what made a working light/dark toggle
-possible. `/player` and `/compare` inherit the new system but have not been
-redesigned. See "The design pass, as built".
+possible. See "The design pass, as built".
 
-**The draft-day toggle is built and on a branch with an open PR.** Players can be
-marked drafted so the board tracks the room, which is the feature that turns a
-prep screen into a draft-day one. It is **the app's first write path** — every
-policy before it was read-only. See "The draft-day toggle, as built".
+**The draft-day toggle is merged.** Players can be marked drafted so the board
+tracks the room, which is the feature that turns a prep screen into a draft-day
+one. It is **the app's first write path** — every policy before it was
+read-only. See "The draft-day toggle, as built".
+
+**Everything built is merged and live. Nothing is on a branch.**
 
 ## Live infrastructure
 
@@ -136,7 +142,8 @@ Verified live on 2026-08-16.
 | **Google sign-in** | **Confirmed working in production**, 2026-08-16, by a human. |
 | `draft_board()` / `player_week_log()` | Working. Verified under member and non-member JWTs. |
 | `player_cards()` / `player_seasons()` | Working. Same verification: member gets rows, non-member and email-less get zero, `anon` is refused. |
-| `data_freshness()` | Working. Powers the "data as of" line. |
+| `data_freshness()` | Working. Powers the dateline on all four screens. |
+| **The app bar and the brand** | **Built and merged.** Crest, wordmark, section tabs, avatar menu, dateline. Markup verified server-side; visuals confirmed by Kevin locally, not on production. |
 | **`drafted` table + write policies** | **Working, and the first write path.** Verified with HS256 JWTs across member, non-member, email-less and `anon`. |
 | Next.js + Python cron on one deployment | **Verified in production**, not assumed. `/api/cron/refresh` answers 401 rather than a redirect. |
 
@@ -261,13 +268,19 @@ security definer bypasses the RLS that would otherwise do it.
   absent, 78 carrying an injury flag.
 - **`compare_players()` was not reused**, as predicted. It scores in-process from
   nflverse at request time, which is right for a CLI and wrong for a web app.
-- **Four components are shared across the three screens**, and each exists
-  because the alternative was a second copy of something that has to agree with
-  itself: `app/plot.tsx` (the distribution and the axis — no `"use client"`, so
-  it renders in the board's client tree and in the server-rendered compare page
-  alike), `app/picker.tsx` (search-and-pick in two modes), `app/nav.tsx`, and
-  `app/not-on-list.tsx` (the non-member explanation, which three screens would
-  otherwise word three ways).
+- **Six components are shared across the screens**, and each exists because the
+  alternative was a second copy of something that has to agree with itself:
+  `app/plot.tsx` (the distribution and the axis — no `"use client"`, so it
+  renders in the board's client tree and in the server-rendered compare page
+  alike), `app/picker.tsx` (search-and-pick in two modes), `app/chrome.tsx` (the
+  crest, the lockup, the app bar and the page head), `app/nav.tsx` (the section
+  tabs), `app/account.tsx` (the avatar popover, and the only `"use client"` one
+  of the four chrome pieces), and `app/not-on-list.tsx` (the non-member
+  explanation, which four screens would otherwise word four ways).
+- **`PageHead` takes the raw `Freshness` row, not a formatted string.** That is
+  deliberate: the four screens cannot word the dateline four ways if none of them
+  can reach the wording. `dateline()` and `datelineStamp()` live in
+  `lib/board.ts` beside the constants they read.
 - **`PlayerCard` is `BoardRow` with a non-null `player_id`.** Not a parallel
   type: the plot must be drawn from the same numbers on all three screens. The
   narrowing is honest rather than cosmetic — see "Why `0004` exists".
@@ -289,7 +302,7 @@ player-centric so the league layer arrives later as an addition, not a redesign.
 
 ### Routes
 
-Four, and anything else is a filter or a sort on one of them.
+Five, and anything else is a filter or a sort on one of them.
 
 | Route | The question it answers | Reads |
 |---|---|---|
@@ -300,10 +313,17 @@ Four, and anything else is a filter or a sort on one of them.
 | `/compare` | Pick two or three. | The board's read, slimmed |
 | `/compare?ids=…` | A or B. | `player_cards()` + `player_seasons()`, 2–3 ids |
 
-All five carry the same **section nav** — Board · Players · Compare. It exists
-because the first cut of `/player/[id]` and `/compare` was reachable only from
-inside an expanded board row, which is a place you have to already know to look.
-A route nobody can find is not built.
+All four signed-in routes carry the same **app bar** — crest, wordmark, the three
+section tabs, one avatar — and under it a **page head** whose `<h1>` names the
+screen. The nav exists because the first cut of `/player/[id]` and `/compare` was
+reachable only from inside an expanded board row, which is a place you have to
+already know to look; a route nobody can find is not built. The two-level split
+exists because collapsing it left the app nameless. See "The header and the
+brand, as built".
+
+**A non-member gets no app bar on any of them** — just `NotOnList`. Tabs to
+sections that would return that reader zero rows are an invitation to three more
+empty pages. `/` used to be the exception and no longer is.
 
 **Search is a control, not a route** — but it now appears as the body of two
 landing pages as well as a box on the board. All three filter **client-side over
@@ -354,7 +374,7 @@ Found by querying the live tables, not by imagining edge cases.
 
 ### The design pass, as built
 
-**Done for the board on 2026-08-16, on branch `board-design`.** Three directions
+**Done for the board on 2026-08-16, merged as PR #3.** Three directions
 were mocked against live `draft_board()` rows and Kevin chose the dense one, then
 asked for colour and depth, which a second pass added.
 
@@ -411,16 +431,23 @@ polyfill is what is actually shipping.
 
 ### Still owed on design
 
-- **`/player` and `/compare` inherit the new tokens but were not redesigned.**
-  They are consistent and not broken; their hierarchy was never decided. The
-  board leads with a title, the stat strip on `/player` leads with figures, and
-  `/compare` leads with a control. That is the next design decision.
+- **`/player` and `/compare` have the new chrome but not a new interior.** The
+  header pass gave all four screens the same app bar, page head and dateline, so
+  the *hierarchy above the fold* is now decided and consistent. What was never
+  decided is what sits below it: the eight-figure stat strip on `/player` and the
+  metric table on `/compare` are the board's tokens applied to layouts nobody
+  designed. That is the oldest outstanding design debt.
 - **The mobile view is still nothing.** A 62rem grid does not survive a phone,
-  and this is three screens that do not, not one.
+  and this is three screens that do not, not one. The app bar wraps rather than
+  collapsing — a slim bar with a crest is the easiest thing here to make work on
+  a phone, and it has not been done.
 - **Nobody has seen the built result in a browser except Kevin.** The machine
   that built it has no browser access, so types, the production build, the
   compiled CSS, the theme states and the served HTML were all verified — and the
-  visual result was not.
+  visual result was not. The one trick worth reusing: a throwaway page under
+  `app/auth/` renders any chrome component to an **unauthenticated** URL
+  (`proxy.ts` treats `/auth/` as public), so the server-rendered markup can be
+  curled without a session. Delete it afterwards.
 
 ### Still open on the UI
 
@@ -446,7 +473,7 @@ own. What remains:
 
 ### The draft-day toggle, as built
 
-**Built 2026-08-16, on branch `draft-day`, with an open PR.** All three of the
+**Built and merged 2026-08-16 (PR #4).** All three of the
 questions this was parked on are answered, and a fourth surfaced during
 exploration that mattered more than any of them.
 
@@ -497,6 +524,64 @@ Still open on it:
   ADP guarantee.
 - **The other eleven have still not been added**, so "shared" is currently a
   promise rather than an exercised path.
+
+### The header and the brand, as built
+
+**Built and merged 2026-08-16 (PR #5).** Kevin supplied the name, chose
+"family-league personality" as the tone, and named the sections worth designing
+for: Draft day, the League layer, and Trends. Three directions were mocked
+against live `draft_board()` rows and he chose the Crest, with the Almanac's
+dateline folded into it.
+
+Published mockup — https://claude.ai/code/artifact/4f1ea6be-6a1e-4315-ae65-b01f9a93e082
+
+**The problem was structural, not visual.** The masthead put a *page* name —
+"Draft board" — in the largest type on screen, so the app had no name at all, and
+wedged the section nav above it where it read as that title's subtitle. Two
+levels of identity had collapsed into one. And `.who-am-i` was a junk drawer: how
+old the data is (a fact about the **data**), an email and a sign-out (the
+**account**), and a theme control (a **preference** set once) in a single flex
+row — which made the rarest action in the app as loud as the screen you were on.
+
+| Decision | Why |
+|---|---|
+| **A crest, not a wordmark alone** | Twelve relatives. A mark goes on a trophy, a group chat and a shirt; a typographic lockup does not. Drawn as inline SVG in `app/chrome.tsx` so it inherits the theme — shield in `--ink`, the initial **knocked out** to `--panel` so it works on the bar and the sign-in card alike, and the bar beneath it in the one amber. |
+| **No new colour** | The palette already spends amber on the median, `--good` on good and `--bad` on bad. A brand hue would be a fourth claim on a screen whose whole argument is that colour means something. Nothing in this pass added a token, which is also why all four theme states still resolve without re-checking them. |
+| **No third typeface** | Character comes from weight, case and tracking in Libre Franklin, which was already loaded. A display face would have been a third `next/font` download for the sake of one line of chrome. |
+| **The dateline is identical on all four screens** | That is what makes it a dateline rather than a caption: one place to look for "how current is this", whether you are on the board or in a career. `2026 season · draft in 14 days · data 6h ago`. |
+| **Tabs are set in the text face** | Mono-uppercase at 0.62rem is exactly what made the old nav read as a caption. These are words you read, not figures you compare. |
+| **Two families, not six peers** | Board · Players · Compare are about *players*; League and Trends will be about *teams*. `.tab-div` is written, styled and **deliberately unused** — the hairline is what says which family a section is in before anyone reads a word. |
+| **Draft day is a mode, not a tab** | It is a state the board is in, not a fourth screen. Its live pill belongs beside the avatar, and `app/chrome.tsx` marks the spot. |
+| **The account popover is a disclosure, not an ARIA menu** | `role="menu"` promises arrow-key navigation over `menuitem` children. This holds an address, a three-state toggle and a form; declaring the role without the behaviour is worse for a screen reader than not declaring it. |
+| **A player's page takes his team's hue** | The bar beside his name *and* the hairline under the page head read `--tm`, the same hue his row carries on the board — `.page-head::after` is `linear-gradient(to right, var(--tm, var(--amber)), transparent)`, so the amber is the fallback rather than the rule. |
+
+**The countdown fails quiet.** `DRAFT_DATE` is an ISO date with no time, because
+nobody has fixed one and an invented hour would render as fact. Once the date has
+passed the dateline **drops the segment entirely** rather than counting down to a
+day in the past, so a forgotten constant next August reads as absent rather than
+wrong. Both sides compare in UTC: local midnight would tick the number over at a
+different moment for relatives in other zones. The exact date and the refresh
+stamp both live in the dateline's `title`, because pages revalidate hourly and a
+rendered "6h ago" can itself be an hour stale.
+
+**Freshness now reaches every screen without an extra round trip.** It is
+threaded through `fetchPlayerOptions` (which already called `fetchBoard`) and
+added to `fetchPlayers`' existing `Promise.all`, rather than given its own
+`cache()`d fetch.
+
+**`LEAGUE_NAME`, `LEAGUE_FOUNDED` and `DRAFT_DATE` are constants in
+`lib/board.ts`**, and `layout.tsx`'s metadata template reads the first — so a
+browser tab says `Compare · Noble Family Football` and the name is written once.
+
+Still open on it:
+
+- **`/player` and `/compare` got the new chrome, not a new interior.** The bar,
+  the page head and the dateline are theirs; the stat strip and the comparison
+  table below them were not touched. See "Still owed on design".
+- **The mobile view is still nothing.** The app bar wraps rather than collapsing,
+  which is not a design.
+- **The League and Trends tabs do not exist yet.** The structure holds them; no
+  route does.
 
 ## Auth and access control
 
@@ -565,12 +650,13 @@ what `npm run dev` needs in the allowlist.
    for the other eleven, and the callback reports it in words.
 
 2. **Nobody but Kevin has used the app.** Deliberate: he does not want the other
-   eleven added until there is something he is ready to share. The board's
-   design pass — which was the thing standing between here and that — is now
-   merged and live, so the stated blocker is gone. **Still do not add them
-   without being asked.** This now also gates the drafted table's *shared* half:
-   with one address on the allowlist, "everyone sees the same board" is a
-   property nothing has exercised.
+   eleven added until there is something he is ready to share. Every blocker he
+   named for that is now merged and live — the board's design pass, the
+   draft-day toggle, and the header pass that gave the app a name to be shared
+   *as*. **Still do not add them without being asked**, but this is the item with
+   a closing window: the draft is 30 August. It also gates the drafted table's
+   *shared* half — with one address on the allowlist, "everyone sees the same
+   board" is a property nothing has exercised.
 
 3. **The layout has never been looked at in a browser by the machine that built
    it.** Data, routing, auth, RLS and server-rendered markup are all verified
@@ -699,6 +785,10 @@ nflverse rosters with no Yahoo side — so draft prep is unaffected.
 | **The middle 50% has no "winner" on `/compare`** | A narrow spread is a different asset, not a better one. Highlighting the narrower one is the mistake the board's "safest floor" sort already avoids. |
 | **The plot lives in `app/plot.tsx`** | Three screens drawing the same axis from three copies of the arithmetic is how a fixed scale stops being fixed. |
 | **Search is client-side over the priced players** | Instant, no index, no round trip. The alternative needs `pg_trgm`. See "Routes". |
+| **The app bar carries identity, the page head carries the page** | Collapsing the two left the product nameless and the nav reading as a subtitle. See "The header and the brand, as built". |
+| **The brand gets no colour of its own** | Amber is the median, `--good` is good, `--bad` is bad. A fourth hue on a screen that argues colour means something is one claim too many. |
+| **The dateline is the same on every screen** | One place to look for "how current is this". A per-screen wording would make it a caption again. |
+| **`.tab-div` exists and is unused** | Board/Players/Compare are about players; League and Trends will be about teams. The divider is the structure that keeps a sixth section from being a sixth peer. |
 | **Commit to `main`, branch only with a reason** | Linear history, solo repo. See "Git and deployment". |
 | **Drafted marks live in Postgres, not `localStorage`** | *Drafted* is a fact about the room, and it survives a device switch. See "The draft-day toggle, as built". |
 | **Drafted is keyed on `(season, norm_name)`** | One draftable player has no `player_id`. See the same section. |
@@ -754,35 +844,45 @@ runtime via `/game/nfl` rather than hardcoding.
 
 ## Next steps, in the order I would do them
 
-The previous list's first two items — merging `player-compare` and
-`board-design` — are **done**, and both post-merge checks were re-run on
-production on 2026-08-16: `/api/cron/refresh` answers `401` with no redirect, and
-the board serves a `307` to `/login` when signed out.
+Every item on the previous list that was a merge is **done**. Nothing is on a
+branch, and PRs #1–#5 are all merged.
 
-1. **Merge the `draft-day` PR.** Migration `0005` is *already* applied to the
-   live database. Production is safe in the meantime: the recreated
-   `draft_board()` returns one extra column, and the currently-deployed code
-   ignores it — a TypeScript cast is compile-time only.
+**The draft is 30 August. That is the deadline everything below is ranked
+against**, and as of this handover it is fourteen days away.
 
-   **This PR does not touch `proxy.ts`**, so the cron is not at risk this time.
-   What to check after merging is that a mark **round-trips in production** — the
-   write path has been exercised against the live database with hand-signed JWTs,
-   but never through a real browser session on the hosted origin.
+1. **Verify PR #5 on production, then rehearse a mock draft.** Two post-merge
+   checks are owed and neither has been run: that **both themes render** with the
+   new chrome, and that a drafted mark **round-trips in production** — the write
+   path has only ever been exercised against the live database with hand-signed
+   JWTs, never through a real browser session on the hosted origin. Do the
+   rehearsal in the same sitting: mark thirty players, hide them, undo one, clear
+   the board. The feature has never met the thing it is for, and this is the last
+   cheap moment to discover that "hide" was the wrong call over "grey out".
 
-2. **Then rehearse a mock draft with it.** The feature has never met the thing it
-   is for. Mark thirty players, hide them, undo one, clear the board. This is
-   also the cheapest way to find out whether "hide" was the right call over
-   "grey out" while there is still time to change it.
+   Neither PR #4 nor #5 touched `proxy.ts`, so the cron is not at risk — but the
+   check costs one `curl` and the failure it catches is invisible:
 
-3. **Then add the other eleven league members** to `league_members`. Each needs
+   ```bash
+   curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
+     https://fantasy-football-red.vercel.app/api/cron/refresh
+   ```
+
+2. **Then add the other eleven league members** to `league_members`. Each needs
    pre-creating, because `disable_signup` blocks a first OAuth sign-in. **Do not
-   do this before Kevin asks** — he has said explicitly he wants something he is
-   ready to share first. Note this is now also what makes the drafted table's
-   *shared* half real rather than theoretical.
+   do this before Kevin asks** — he has said he wants something he is ready to
+   share first, and the header pass was the last thing he named as standing
+   between here and that. With a draft in a fortnight, this is the item whose
+   window closes: eleven people cannot use a shared drafted board on the day if
+   they were added the night before.
 
-4. **Consider the `/player` and `/compare` design pass**, which is the oldest
-   outstanding design debt: they inherit the board's tokens but their hierarchy
-   was never decided. See "Still owed on design".
+3. **Then the mobile view**, if the eleven are in. Eleven relatives invited to a
+   URL will open it on a phone, and today that is a 62rem grid on a 24rem screen.
+   The app bar is the easy half; the board is the hard half and probably wants
+   its own layout rather than a reflow — see "Still owed on design".
+
+4. **The `/player` and `/compare` interiors**, which is the oldest outstanding
+   design debt now that their chrome is settled. Lower stakes than the three
+   above: those screens are consistent and not broken.
 
 5. **In-season: run the Yahoo score diff** to close Q2 and Q3.
 6. **Then team defense** (Q4), once Q3 is settled.
@@ -802,17 +902,51 @@ Testing, which disables the test-user list). **Deferred until onboarding**, and
 worth revisiting then because a domain would also replace
 `fantasy-football-red.vercel.app`.
 
+That deferral is worth more now than it was. The app has a name, a crest and a
+sign-in page that carries both — and the Google consent screen in the middle of
+that flow still says `sebizyhnwgarnbukqkxu.supabase.co`. It is the one place the
+branding stops, and eleven people are about to walk through it. Nothing here has
+changed technically; the cost/benefit has. A domain like
+`noblefamilyfootball.com` would fix the consent screen, the deployment URL and
+the sign-in host in one purchase.
+
 ### Why these went through a PR
 
 The standing rule is still commit-to-`main`, and it has not changed. Kevin asked
-for a PR on the design pass and again on the draft-day toggle. The first UI
-change also took a branch, for a different and now-historical reason: it was the
-first push that changed which framework Vercel builds the project with.
+for a PR on the design pass, again on the draft-day toggle, and again on the
+header pass. The first UI change also took a branch, for a different and
+now-historical reason: it was the first push that changed which framework Vercel
+builds the project with.
+
+Read the pattern rather than the rule: **every change to what the app looks like
+has gone through a PR, and Kevin has asked for one each time.** Offer it.
 
 Note the working shape this settled into: the work is committed to `main`
 locally, then moved onto a branch when a PR is wanted. Committing is cheap and
 local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
+
+## State as of the end of the 2026-08-16 header session
+
+- **PR #5 is merged (`0e3a50f`). Nothing is on a branch and `main` is pushed.**
+  Everything under "The header and the brand, as built" is live in the repo.
+- **The app is called Noble Family Football**, founded 2021, drafting 30 August.
+  Kevin supplied all three; none was inferred, and the first commit deliberately
+  shipped without the date and the year rather than guessing them.
+- **Two post-merge checks are outstanding**, and they are item 1 of "Next steps":
+  both themes rendering on production, and a drafted mark round-tripping through
+  a real browser session on the hosted origin.
+- `tsc`, `next build`, 56 Python tests and `ruff` all clean.
+- **Verified without a browser**: the production build; that the pass introduces
+  **no new CSS token**, which is what makes "all four theme states still resolve"
+  a fact rather than a hope; the countdown's boundaries at 14 days, tomorrow,
+  today and both sides of the date; and the server-rendered markup of the app
+  bar, page head, dateline, team hue and sign-in card, read back off a throwaway
+  public route under `app/auth/` which was then deleted.
+- **Kevin confirmed the visual result locally.** The machine that built it still
+  has no browser.
+- **A `next dev` server may still be running on port 3000.**
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-16 draft-day session
 
@@ -883,6 +1017,12 @@ step that ships.
 - Nothing is half-finished.
 
 ## Things that will bite you
+
+- **A new season is four constants, not one.** `ADP_SEASON`, `STAT_SEASON` and
+  `DRAFT_DATE` in `lib/board.ts` all have to move together, and the pipeline's
+  seasons with them. Getting `DRAFT_DATE` wrong is the quiet one — it fails by
+  disappearing from the dateline rather than by showing something false, which
+  is the right failure but also the one nobody notices.
 
 - **A `"use client"` module's exports are client references, even the strings.**
   `THEME_SCRIPT` imported into `layout.tsx` from the client component arrived as
