@@ -40,7 +40,16 @@ tracks the room, which is the feature that turns a prep screen into a draft-day
 one. It is **the app's first write path** — every policy before it was
 read-only. See "The draft-day toggle, as built".
 
-**Everything built is merged and live. Nothing is on a branch.**
+**The player pages got their depth pass, and it is on a branch.** `/player/[id]`
+has a face and a bio, every season shows where it ranked among startable players
+at that position, an opened season draws its weeks in order as well as in
+distribution, and a bar says what the season's points were actually made of. The
+database also gained a decade of historical draft prices, backfilled once from
+Fantasy Football Calculator, which makes "was he worth his ADP" answerable for
+the first time. See "The player depth pass, as built".
+
+**Everything else built is merged and live. The player depth pass is on
+`player-bio` with an open PR; nothing else is on a branch.**
 
 ## Live infrastructure
 
@@ -130,11 +139,11 @@ Verified live on 2026-08-16.
 | `ff refresh` | **Working against real Postgres.** Full and incremental both exercised. |
 | `api/cron/refresh` deployed | **Working.** 401 without the secret, 200 and a full run with it. |
 | Daily cron | Registered and enabled. |
-| Supabase schema | Migrations `0001`–`0005` applied. 7 tables + allowlist. |
+| Supabase schema | Migrations `0001`–`0008` applied. 8 tables + allowlist. |
 | Google sign-in | Provider enabled; signups disabled; allowlist enforced in RLS. |
 | `scripts/smoke_test.py` | Working. All 4 no-auth sources green. |
 | `scoring/`, `sources/`, `analysis/` | Fully implemented. |
-| Test suite | 56 tests, all passing. `uv run pytest` |
+| Test suite | 62 tests, all passing. `uv run pytest` |
 | Lint | Clean. `uv run ruff check .` |
 | **Web UI — the board** | **Built and live.** Renders 923 ADP rows against live data. |
 | **`/player` and `/player/[id]`** | **Built.** Search page plus a full career, one row per season. |
@@ -142,19 +151,28 @@ Verified live on 2026-08-16.
 | **Google sign-in** | **Confirmed working in production**, 2026-08-16, by a human. |
 | `draft_board()` / `player_week_log()` | Working. Verified under member and non-member JWTs. |
 | `player_cards()` / `player_seasons()` | Working. Same verification: member gets rows, non-member and email-less get zero, `anon` is refused. |
+| `position_context()` | Working. Same verification. 252ms warm over REST against 171ms for `player_cards()`. |
+| `adp_history` table | **Backfilled, 2,936 rows, 2012–2026.** Read-only to members; INSERT/UPDATE/DELETE all 403. |
+| **Player bio and portraits** | **Built, on `player-bio`.** 8,940 of 10,145 players have a headshot; 1,190 of 1,259 current skill players. |
 | `data_freshness()` | Working. Powers the dateline on all four screens. |
 | **The app bar and the brand** | **Built and merged.** Crest, wordmark, section tabs, avatar menu, dateline. Markup verified server-side; visuals confirmed by Kevin locally, not on production. |
 | **`drafted` table + write policies** | **Working, and the first write path.** Verified with HS256 JWTs across member, non-member, email-less and `anon`. |
 | Next.js + Python cron on one deployment | **Verified in production**, not assumed. `/api/cron/refresh` answers 401 rather than a redirect. |
 
-Published data as of the last run: 174,201 scored player-weeks, 10,146 players,
-3,251 ADP rows, 5 injury items.
+Published data as of the last run: 174,201 scored player-weeks, **10,145**
+players, 3,251 ADP rows, 5 injury items, and **2,936 historical ADP rows**.
+
+The player count dropped by one and that is a fix, not a loss: rosters carry
+`gsis_id` values that are the empty string as well as ones that are null, and
+`is_not_null()` alone let the empty string through to become a `player_index`
+row keyed on `""` — a valid primary key and a player page for nobody.
 
 ## The UI, as built
 
 The read path turned out as thin as predicted: **no Python at request time**, no
-nflverse download, no Polars, no scoring engine. Five SQL functions across
-`0003_board.sql` and `0004_player.sql` are the whole thing.
+nflverse download, no Polars, no scoring engine. Six SQL functions across
+`0003_board.sql`, `0004_player.sql` and `0008_position_context.sql` are the
+whole thing.
 
 | Function | Returns | Notes |
 |---|---|---|
@@ -162,6 +180,7 @@ nflverse download, no Polars, no scoring engine. Five SQL functions across
 | `player_week_log(player_id, season)` | One player's weeks, all 22 rule columns | Fetched only when a row or a season is expanded |
 | `player_cards(ids[], adp, stat, ceiling, floor)` | `draft_board()`'s row shape for a named set of players | Migration `0004`. Input order preserved, duplicates collapsed |
 | `player_seasons(ids[], ceiling, floor)` | One row per season of a career, each with its own weeks and points | Migration `0004`. What makes `/player/[id]` worth a route |
+| `position_context(ids[], teams)` | One row per (player, season): his rank among startable players at his position, the cohort size, and the cohort's weekly quartiles | Migration `0008`. The denominator the fixed axis never had |
 | `data_freshness()` | Two timestamps and the rules fingerprint | See "Staleness needed more than a policy" |
 
 All are `SECURITY INVOKER` except `data_freshness()`, so the allowlist policies
@@ -467,7 +486,7 @@ own. What remains:
   all 923 rows are already in memory — only the rendering is bounded. If it ever
   feels slow, virtualise the rows; do not start paging the query.
 - **Search covers only players with an ADP.** See "Routes". A `pg_trgm` index on
-  `player_index.norm_name` is what widens it to all 10,146.
+  `player_index.norm_name` is what widens it to all 10,145.
 - **The mobile view is still a separate design**, not this one reflowed. A 64rem
   grid does not survive a phone. Now true of three screens rather than one.
 
@@ -524,6 +543,168 @@ Still open on it:
   ADP guarantee.
 - **The other eleven have still not been added**, so "shared" is currently a
   promise rather than an exercised path.
+
+### The player depth pass, as built
+
+Four changes to `/player/[id]`, one to the pipeline, and one one-time backfill.
+The through-line: the page could rank a player and could not tell you anything
+about him, and every number on it was a figure with no referent.
+
+**A player page now has a player.** `player_index` carries eight more columns —
+`headshot_url`, `birth_date`, `college`, `jersey_number`, `years_exp`,
+`draft_number`, `draft_club`, `rookie_year` — and every one of them was already
+in the nflverse roster file `player_index()` has read since day one. They were
+being selected away.
+
+The fold is the part worth understanding before touching it. **`team` and
+`position` come from the latest roster row; the bio columns come from the last
+row that actually has one.** 92 of 3,137 players on the 2025 roster have no
+`headshot_url`, and taking the newest row wholesale blanks a portrait that an
+earlier season had — the same portrait, because a face does not change with a
+trade. `BIO_COLUMNS` and `CURRENT_COLUMNS` in `ff/analysis/players.py` name
+which is which, and `tests/test_player_bio.py` pins the behaviour.
+
+No backfill script was needed: `replace_table()` TRUNCATEs and rewrites
+`player_index` whole on every refresh, so the next cron run filled all ten
+thousand rows.
+
+**Headshots are on the player page and must stay off the board.** Vercel bills
+image optimization per cache *miss*, not per image in the project, and Hobby
+includes 5,000 transformations a month. One portrait per player page means the
+ceiling is "distinct players opened in a month", which twelve relatives will not
+approach. One portrait per board row would be 923 transformations in a single
+page view and would spend the month in five refreshes. The reasoning is written
+into `next.config.ts` where someone would look before changing it. Overrun fails
+soft: new images 402 and render their `alt`, cached ones keep working, Hobby is
+never charged.
+
+**The season arc** draws the weeks in order, in the expanded season above the
+game log. The distribution discards week order on purpose — that is what makes a
+median and an IQR better than an average — but a slow start that became a
+breakout and a hot start that collapsed produce the *same* distribution. No new
+query: `player_seasons()` has always returned `weeks` and `points`.
+
+Weeks with no game break the line rather than being interpolated through, and
+they are **listed, never called "missed"**. Every player has a bye,
+`scored_weekly_stats` holds no schedule, and the app cannot tell a bye from four
+weeks on IR. Naming the weeks is a fact; naming them missed would be a
+diagnosis. **Storing `load_schedules()` is what would let the app tell them
+apart** — the source wrapper exists in `ff/sources/nflverse.py` and the table
+does not.
+
+**The composition bar** says what a season's points were made of.
+`0001_init.sql` has always claimed the 22 stat columns exist "so the UI can
+explain a score, not just assert it", and until now the UI explained one week a
+season. Gibbs 2025 takes 29% of his points from touchdowns; Chase takes 15% —
+that is the difference between a regression candidate and a volume asset, and
+the page was showing a total. `decompose()` became a special case of
+`decomposeSeason()` over one week; `GameLog` already had the array.
+
+Two rules in it that should survive edits. **Every segment is the player's own
+team hue at a different opacity, never a different hue** — colour on this app
+means team, and a categorical palette here would be a second colour language
+competing with the one the board teaches. **Amber stays out**: it marks the
+median and nothing else earns it. And the drift tolerance **scales with the
+number of weeks** rather than staying at a flat tenth of a point, because 17
+weeks of float arithmetic accumulates more error than one and a check that
+trips on rounding alone would cry wolf every season.
+
+**The positional band** is the denominator the fixed 0–56 axis never had. Median
+14.2 is either an excellent running back or a replaceable one and the app could
+not say which. `idx_scored_position_points` was built for this in `0001` and had
+never been used by anything.
+
+**The cohort is the feature, not a parameter.** Measured on 2025:
+
+| cohort | p25 | median | p75 |
+|---|---|---|---|
+| top 12 RBs | 11.4 | 17.0 | 22.8 |
+| top 24 RBs | 8.7 | **14.3** | 20.1 |
+| top 36 RBs | 7.2 | 12.1 | 18.7 |
+| all 151 RBs | 1.1 | **5.1** | 11.4 |
+
+The number moves enough with the cutoff that it could not be buried, so it is
+**derived** — `p_teams` × starters at that position — rather than picked. The
+lineup that implies (1 QB, 2 RB, 3 WR, 1 TE, 1 K) is stated in the migration as
+the assumption it is: **the Yahoo integration that would tell us this league's
+real roster settings is still stubbed.** When it lands, `position_starters()` is
+the one function to change and every band moves at once.
+
+Two decisions in it worth not reversing. **Position comes from the weeks via
+`mode()`, never from `player_index.position`** — the index holds what a player
+is *now* and this ranks seasons up to a decade old, so a receiver who finished
+at tight end must be ranked against receivers in the years he was one. And **a
+rank past the cohort is shown, not hidden**: Allen's rookie year reads `QB21 of
+12`, which is the truth about it, and blanking out-of-cohort seasons would empty
+exactly the rows carrying the worst news.
+
+It also landed on `/compare`, which was already paying for the query. That is
+the screen where it matters most — comparing a back with a receiver on raw
+points compares two different jobs. **The rank row is never marked as a win**:
+`RB3 of 24` and `QB1 of 12` are ranks in differently sized pools, the same
+reason the IQR row refuses to crown anything.
+
+### Historical ADP, and why it is a separate table
+
+The app has scored every NFL week in this league's terms for ten seasons and
+could never say whether a player was *worth* his draft slot, because it only
+ever knew one slot: `replace_table()` TRUNCATEs `adp_projections` on every
+refresh and Sleeper serves the season being drafted. Each August overwrote the
+last one.
+
+Fantasy Football Calculator publishes the missing half as free JSON, no auth,
+one document per season — **PPR and 12-team, which is this league exactly**.
+`ff/sources/ffc.py` wraps it; `scripts/ingest_adp_history.py` is a one-time
+backfill run by hand, not part of the cron. 2,936 rows, 2012–2026, now in
+`adp_history`.
+
+**A separate table rather than a wider `adp_projections`, and that is
+load-bearing.** `adp_projections` is a cache the cron rebuilds each morning;
+this is accumulated history that cannot be re-derived if lost — the same
+distinction `0001` draws for `injury_news`. Keeping them apart means the daily
+TRUNCATE can never reach it. It is also why `authenticated` gets `SELECT` and
+nothing else: Supabase's default grants hand out `TRUNCATE`, and **RLS is not
+consulted for `TRUNCATE` at all**.
+
+The sample thins going back — 303 drafts in 2012 against 8,470 in 2025 — so
+`times_drafted` and `stdev` are carried rather than dropped. A 2012 ADP and a
+2025 ADP are not equally trustworthy and the table can say so.
+
+Match rates, measured 2026-08-16:
+
+| scope | rate |
+|---|---|
+| all rows, all seasons | 91.2% |
+| excluding team defences | 96.4% |
+| excluding DEF, 2016+ | **99.2%** (2,075 of 2,091) |
+
+The widest number is the least useful. Team defences are ~9% of every FFC season
+and have no `gsis_id` by definition. Below 2016 the misses are players who
+retired before `player_index`'s window opens — Calvin Johnson, Peyton Manning,
+Ray Rice — who have no scored weeks to compare a price against anyway. What is
+left at 99.2% is **16 rows over eleven seasons, every one a first-name variant**:
+Hollywood/Marquise Brown, Joshua/Josh Palmer, Steven/Steve Hauschka,
+Michael/Mike Badgley, Chris/Christopher Herndon, Kenny Gainwell.
+`attach_player_ids()` matches exact normalised names only, and `ff.identity`'s
+fuzzy resolver is **deliberately not reached for** — 16 auditable nulls beat a
+threshold that might quietly attach the wrong man.
+
+**Nothing in the UI reads `adp_history` yet.** The data is there and the feature
+that draws on it is not built. That is the next obvious thing and it is
+answerable now rather than in a year.
+
+### The one thing sized by eyeball, and what it cost
+
+The arc shipped at a viewBox of 720×150, chosen against an assumed container
+width. `.shell` is `max-width: 90rem`, so the plot area is about 1330px, which
+scaled that box by 1.85: a **277px chart under a 30px row, with 20px axis
+labels — larger than anything else on the page.** SVG text scales with the
+viewBox, so the height and the labels were wrong for the same reason and were
+fixed by the same change (1080×160).
+
+Everything else in this pass was verified against real data before shipping.
+This was not. **If you add another SVG here, size its viewBox against 1330px**,
+and remember that its `font-size` is in viewBox units.
 
 ### The header and the brand, as built
 
@@ -687,6 +868,7 @@ counts means upstream changed shape.
 | Table | Bad rows | What they are |
 |---|---|---|
 | `player_index` | 1 of 10,147 | Roster entry with no `player_name` (gsis_id `00-0031605`, a 2016 Viking). Both name columns are `NOT NULL`. |
+| `player_index` | 1 more | Roster entry whose `gsis_id` is the empty string rather than null. Would have become a row keyed on `""`. |
 | `scored_weekly_stats` | 175 across the decade | All-zero placeholder per team-week with no `player_id`, which is part of the primary key. |
 | `adp_projections` | — | Not a data hole: Polars inferred `Null` for `injury_status` from the first rows and then failed on `"Questionable"`. Schema is now declared explicitly. |
 
@@ -844,8 +1026,8 @@ runtime via `/game/nfl` rather than hardcoding.
 
 ## Next steps, in the order I would do them
 
-Every item on the previous list that was a merge is **done**. Nothing is on a
-branch, and PRs #1–#5 are all merged.
+PRs #1–#5 are merged. **PR #6 (`player-bio`) is open** and carries the player
+depth pass.
 
 **The draft is 30 August. That is the deadline everything below is ranked
 against**, and as of this handover it is fourteen days away.
@@ -883,12 +1065,31 @@ against**, and as of this handover it is fourteen days away.
    The app bar is the easy half; the board is the hard half and probably wants
    its own layout rather than a reflow — see "Still owed on design".
 
-4. **The `/player` and `/compare` interiors**, which is the oldest outstanding
+4. **A `.page-head` overflow, found and not chased.** On `/player/[id]` the
+   dateline runs to the very edge of the viewport while the career panel below
+   stops short of it. Spotted in a screenshot at the end of the depth-pass
+   session; Kevin deferred it deliberately, so it is a known thing rather than a
+   discovery. The portrait making the page head taller may have exposed it
+   rather than caused it — check `/` and `/compare` before assuming it is new.
+
+5. **Build the feature `adp_history` exists for.** The data is backfilled and
+   nothing reads it. "What did a player drafted here actually return, in this
+   league's scoring" is now a join away, and it is the one question this app can
+   answer that no commercial tool can. Start within-season (2026 ADP against
+   2026 projection against 2025 delivered) — it is most of the value and needs
+   no new ingest.
+
+6. **The `/player` and `/compare` interiors**, which is the oldest outstanding
    design debt now that their chrome is settled. Lower stakes than the three
    above: those screens are consistent and not broken.
 
-5. **In-season: run the Yahoo score diff** to close Q2 and Q3.
-6. **Then team defense** (Q4), once Q3 is settled.
+7. **In-season: run the Yahoo score diff** to close Q2 and Q3.
+8. **Then team defense** (Q4), once Q3 is settled.
+
+Worth knowing about item 3: **the arc, the composition bar and the field band
+are all desktop-sized**, and the arc's labels shrink with the container because
+SVG text scales with its viewBox. The mobile pass now has three more components
+to think about, not one board.
 
 Worth doing at some point, and not urgent: **close the default grants on the
 other seven tables** (see "Things that will bite you"). Harmless today because
@@ -928,6 +1129,47 @@ Note the working shape this settled into: the work is committed to `main`
 locally, then moved onto a branch when a PR is wanted. Committing is cheap and
 local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
+
+## State as of the end of the 2026-08-16 player depth session
+
+- **PR #6 (`player-bio`) is open. Everything else is merged.** Seven commits:
+  bio and portraits, historical ADP, the college fix, the arc, the composition
+  bar, the positional band, and its use on `/compare`.
+- **Migrations `0006`, `0007` and `0008` are applied to the live database**,
+  each in one transaction, before the code that uses them shipped — the same
+  order `0001`–`0005` used. `0006` and `0008` recreate `player_cards()` and add
+  a function; `0007` adds a table. Nothing existing was dropped or narrowed.
+- **A refresh was run after `0006`** so the bio columns are populated: 10,145
+  rows, 8,940 with a portrait, 1,190 of 1,259 current skill players.
+- **`adp_history` is backfilled**: 2,936 rows, 2012–2026, 99.2% matched on the
+  seasons that have scored data.
+- **RLS on the new objects was verified with HS256 JWTs**, not assumed: a member
+  reads (in any email casing), a non-member and an email-less token read zero
+  from every RPC including `position_context()`, `anon` is refused outright, and
+  a member's INSERT, UPDATE and DELETE against `adp_history` all return 403 with
+  the row count unchanged.
+- **Arithmetic was verified against real data rather than reasoned about.**
+  Season composition is exact against a back, a receiver, a quarterback and a
+  kicker — four different rule sets. The arc's run-splitting was checked against
+  McCaffrey and Gibbs (both split correctly on their byes) and its geometry
+  clamps at both ends. `ageFrom`, `ordinal` and `tenure` were exercised across
+  23 edge cases including birthday boundaries and 11th/12th/13th.
+- **Those JS checks are not committed.** The repo has no JS test runner —
+  `npm run lint` is `tsc --noEmit` — and adding one was out of scope. They were
+  run from the scratchpad. **If you touch `decomposeSeason`, `shares`, the arc
+  geometry or `ageFrom`, there is no test that will catch you.** That is the
+  largest gap this session leaves.
+- **Two bugs were found by looking at a screenshot, not by testing.** The
+  college field renders `Alabama; Georgia Tech` for the 1,027 players nflverse
+  lists a transfer for, and the arc was sized against a guessed container width.
+  Both are fixed. Both would have shipped if nobody had looked.
+- **Not a bug, checked: Jahmyr Gibbs really does wear #0.** The number has been
+  legal since 2023 and 34 players have one.
+- `tsc`, `next build`, 62 Python tests and `ruff` all clean.
+- **Phases 2–4 have not been seen in light mode.** Kevin reviewed the dark
+  theme; the composition bar's opacity steps are the thing most likely to be
+  wrong on a light ground.
+- Nothing is half-finished.
 
 ## State as of the end of the 2026-08-16 header session
 
@@ -1092,6 +1334,30 @@ step that ships.
   its length** — do not trust the success message. (Seen on CLI v54.11.1; the
   CLI is now 59.1.3, which likely fixes it, but the habit of reading a secret
   back is worth keeping regardless — this failure is silent and fails closed.)
+
+- **An empty string is not a null, and `gsis_id` has both.** nflverse rosters
+  carry a handful of each. `is_not_null()` alone let the empty string through to
+  become a `player_index` row keyed on `""` — a valid Postgres primary key and a
+  player page for nobody. Fixed in `player_index()`; the same shape of hole is
+  worth checking wherever an upstream id is filtered.
+
+- **SVG text scales with its viewBox, and this app's plot area is ~1330px.**
+  `.shell` is `max-width: 90rem`. A `font-size: 11px` inside a 720-unit-wide
+  viewBox renders at 20px, which is how the season arc shipped with axis labels
+  larger than the page's headings. Size a new chart's viewBox against 1330 and
+  its height follows; both are the same decision.
+
+- **Vercel bills image optimization per cache miss, not per image.** Hobby
+  includes 5,000 transformations a month. That is generous for one portrait per
+  player page and would be spent in five refreshes by one portrait per board
+  row. **Headshots belong on `/player/[id]` and nowhere else** — the reasoning
+  is in `next.config.ts`, and moving them is the change that breaks the budget.
+
+- **`adp_history` is the second table that cannot be rebuilt from upstream.**
+  `injury_news` was the first. Everything else in the schema is a cache the cron
+  restores every morning; these two are not. Neither belongs in a
+  `replace_table()` call, and `authenticated` deliberately has no `TRUNCATE` on
+  either — RLS is never consulted for it.
 
 - **Names are not identifiers.** 143 normalised names in `player_index` belong
   to more than one player, and matching on name alone silently resolved three
