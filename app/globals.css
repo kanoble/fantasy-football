@@ -1544,6 +1544,105 @@ table.log td.z {
   white-space: normal;
 }
 
+/* the season arc ------------------------------------------------------
+   The same season as the plot on the row above, drawn against time instead of
+   against frequency. Deliberately reuses that plot's vocabulary rather than
+   inventing a second one: team hue for the line, a filled dot for a ceiling
+   week, a hollow ring for a floor week, amber for the median and nothing else.
+   A reader who has learnt the board has nothing new to learn here. */
+
+.arc-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.arc {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.arc-gl {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+
+/* 10 and 20 — the floor and ceiling thresholds. */
+.arc-gl.th {
+  stroke: var(--firm);
+}
+
+.arc-ylab,
+.arc-xlab {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--faint);
+  letter-spacing: 0.05em;
+}
+
+.arc-ylab {
+  text-anchor: end;
+  dominant-baseline: middle;
+}
+
+.arc-xlab {
+  text-anchor: middle;
+}
+
+/* The median, in the one accent the palette spends on it. Dashed so it reads
+   as a reference rather than as another week of football. */
+.arc-med {
+  stroke: var(--amber);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: 0.75;
+}
+
+.arc-line {
+  fill: none;
+  stroke: var(--tm, var(--tm-none));
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.85;
+}
+
+/* Weeks he did not play. Drawn, but drawn as absence — a solid line here would
+   be four weeks of football that never happened. */
+.arc-gap {
+  fill: none;
+  stroke: var(--tm, var(--tm-none));
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+  opacity: 0.3;
+}
+
+/* Same three states as .plot .dot, for the same reason. */
+.arc-dot {
+  fill: var(--tm, var(--tm-none));
+  opacity: 0.55;
+}
+
+.arc-dot.hi {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--tm, var(--good)) 60%, transparent));
+}
+
+.arc-dot.lo {
+  fill: var(--panel);
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  opacity: 0.85;
+}
+
+.arc-quiet {
+  color: var(--faint);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
 /* the expanded row's footer ------------------------------------------- */
 
 /* Sits directly under the game-log panel and reads as part of it, so the
@@ -1551,6 +1650,19 @@ table.log td.z {
 .panel:has(+ .panel-actions) {
   border-bottom: 0;
   padding-bottom: 0.4rem;
+}
+
+/* Two panels in one expanded season — the arc, then the game log. They are one
+   surface interrupted, not two, so the first drops its rule and the second
+   drops the shadow that would otherwise draw a lip between them. */
+.panel:has(+ .panel) {
+  border-bottom: 0;
+  padding-bottom: 0.5rem;
+}
+
+.panel + .panel {
+  box-shadow: inset 0 -3px 8px -6px var(--shadow);
+  padding-top: 0.5rem;
 }
 
 .panel-actions {

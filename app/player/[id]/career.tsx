@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { CEILING, type SeasonRow } from "@/lib/board";
+import { Arc } from "../../arc";
 import { GameLog } from "../../game-log";
 import { Axis, Plot } from "../../plot";
 
@@ -107,12 +108,26 @@ export function Career({
               </button>
 
               {expanded ? (
-                <GameLog
-                  playerId={playerId}
-                  name={name}
-                  season={season.season}
-                  tone={tone}
-                />
+                <>
+                  {/* Order matters: shape, then arc, then arithmetic. The row
+                      above says how good the season was, this says when, and
+                      the game log under it says how each week was built. */}
+                  <div className={`panel arc-panel ${tone}`}>
+                    <Arc
+                      weeks={season.weeks}
+                      points={season.points}
+                      median={season.median}
+                      season={season.season}
+                      name={name}
+                    />
+                  </div>
+                  <GameLog
+                    playerId={playerId}
+                    name={name}
+                    season={season.season}
+                    tone={tone}
+                  />
+                </>
               ) : null}
             </div>
           );
