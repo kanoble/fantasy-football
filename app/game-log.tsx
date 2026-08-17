@@ -5,6 +5,7 @@ import { Fragment, useEffect, useState } from "react";
 import { CEILING, FLOOR, STAT_SEASON, type WeekRow } from "@/lib/board";
 import { LEAGUE_RULES, decompose, type StatRule } from "@/lib/scoring";
 import { createClient } from "@/lib/supabase/client";
+import { Composition } from "./composition";
 
 const f1 = (value: number) => value.toFixed(1);
 
@@ -96,6 +97,11 @@ export function GameLog({
 
   return (
     <div className={`panel ${tone}`}>
+      {/* Season first, then one week, then every week. The same argument at
+          three magnifications: what the season was made of, how a single
+          Sunday reaches its number, and the table both are read from. */}
+      <Composition weeks={weeks} season={season} tone={tone} />
+
       {/* The arithmetic leads. It is the app's whole argument — that a score can
           be *shown* rather than asserted — and it was previously set smaller
           than the table above it, under a heading, as though it were a note. */}

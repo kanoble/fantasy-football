@@ -1544,6 +1544,100 @@ table.log td.z {
   white-space: normal;
 }
 
+/* where the points came from ------------------------------------------
+   One bar, segmented by scoring rule, in the player's own team hue at stepped
+   opacity. Never a categorical palette: colour on this app means team, and a
+   second hue language here would be competing with the one the board teaches.
+   Value separates the categories and the hue keeps its meaning. Amber stays
+   out of it — that marks the median and nothing else earns it. */
+
+.comp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.comp-bar {
+  display: flex;
+  /* The gap is the separator. Two adjacent segments a step apart in opacity
+     need an edge between them, and a border would add a colour this bar has
+     deliberately not got. */
+  gap: 2px;
+  height: 2rem;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--bg);
+  box-shadow: inset 0 1px 3px var(--groove-top);
+}
+
+.comp-seg {
+  background: var(--tm, var(--tm-none));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2px;
+  overflow: hidden;
+  transition: opacity 0.15s ease;
+}
+
+.comp-seg:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.comp-seg:last-child {
+  border-radius: 0 2px 2px 0;
+}
+
+/* Knocked out of the segment rather than set on top of it, so the label works
+   against the full-strength first segment and the faint last one alike. */
+.comp-lab {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--panel);
+  white-space: nowrap;
+  padding: 0 0.3rem;
+  mix-blend-mode: luminosity;
+}
+
+.comp-lab b {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Deductions. Past the end of the bar rather than inside it: a lost fumble
+   does not sit beside receiving yards taking up room, it removes some. */
+.comp-deficit {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bad);
+  font-variant-numeric: tabular-nums;
+}
+
+.comp-gross {
+  color: var(--faint);
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comp-seg {
+    transition: none;
+  }
+}
+
 /* the season arc ------------------------------------------------------
    The same season as the plot on the row above, drawn against time instead of
    against frequency. Deliberately reuses that plot's vocabulary rather than
