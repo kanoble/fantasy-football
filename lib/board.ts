@@ -41,6 +41,31 @@ export const CEILING = 20;
 export const FLOOR = 10;
 
 /**
+ * The domains `/compare`'s gauges are drawn on.
+ *
+ * Every gauge there runs an **absolute** scale rather than one fitted to
+ * whoever happens to be in the comparison. That is the whole difference between
+ * a mark that means something and a mark that only ranks the three players on
+ * screen: fitting the scale to the selection makes every bar move when a player
+ * is added or removed, so a reader learns nothing that survives the next
+ * comparison.
+ *
+ * `AXIS_MAX` covers the points rows and is already the app's fixed axis.
+ * These two cover the other domains:
+ *
+ * - `SEASON_GAMES` is a regular season. Nobody can exceed it, so a count of
+ *   weeks has a true ceiling rather than a chosen one.
+ * - `TOTAL_MAX` is **the one arbitrary number in the set**, and it is arbitrary
+ *   because season points have no natural ceiling. 450 clears the largest
+ *   season in the published set (McCaffrey's 416.6 in 2025) with room to spare.
+ *   The honest alternative is the position cohort's best that year, which moves
+ *   every season and would make two players' bars incomparable across
+ *   positions — worse, for this screen, than a round number that never moves.
+ */
+export const SEASON_GAMES = 17;
+export const TOTAL_MAX = 450;
+
+/**
  * A score as a percentage across the fixed axis, clamped so nothing escapes
  * the track.
  *
