@@ -60,8 +60,33 @@ function draftLine(card: PlayerCard): string | null {
   return `${where}${when}${club}`;
 }
 
+/**
+ * The school he was drafted out of, from a field that may list several.
+ *
+ * nflverse returns transfers as a semicolon-separated list, most recent first
+ * — "Alabama; Georgia Tech" for Jahmyr Gibbs, who spent two years at Georgia
+ * Tech and one at Alabama. 1,027 of 10,145 players have one, so rendering the
+ * raw column puts a delimiter on a tenth of all player pages, which reads as
+ * the database leaking rather than as a fact about a career.
+ *
+ * The first entry is the one that matters: it is where he was playing when he
+ * was drafted, and it is what every other source prints. The rest is kept in
+ * the `title` rather than thrown away — a transfer is interesting, it is just
+ * not what this line is for.
+ */
+function colleges(raw: string | null): { primary: string; full: string } | null {
+  if (!raw) return null;
+  const parts = raw
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return null;
+  return { primary: parts[0]!, full: parts.join(" · ") };
+}
+
 export function Bio({ card }: { card: PlayerCard }) {
   const age = ageFrom(card.birth_date);
+  const school = colleges(card.college);
 
   const now = [
     card.position,
@@ -72,7 +97,6 @@ export function Bio({ card }: { card: PlayerCard }) {
   ].filter(Boolean);
 
   const then = [
-    card.college,
     draftLine(card),
     `${card.career_games} career game${card.career_games === 1 ? "" : "s"}`,
   ].filter(Boolean);
@@ -85,7 +109,19 @@ export function Bio({ card }: { card: PlayerCard }) {
           <span className="flagpill q inline">{card.injury_status}</span>
         ) : null}
       </span>
-      {then.length > 0 ? <span className="bio-then">{then.join(" · ")}</span> : null}
+      <span className="bio-then">
+        {school ? (
+          <>
+            {/* The full list only when there is more than one, so the title is
+                never just the text underneath it. */}
+            <span title={school.full !== school.primary ? school.full : undefined}>
+              {school.primary}
+            </span>
+            {then.length > 0 ? " · " : null}
+          </>
+        ) : null}
+        {then.join(" · ")}
+      </span>
     </>
   );
 }
