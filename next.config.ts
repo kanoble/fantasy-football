@@ -12,6 +12,32 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   typedRoutes: true,
 
+  // The same instruction the root layout already sends as a <meta> tag, said
+  // again as a header — because a meta tag only exists inside HTML. A route
+  // handler's JSON, an optimized image, anything served that is not a page has
+  // no <head> to carry it, and those get indexed too.
+  //
+  // `noarchive` and `nosnippet` go further than the meta tag does: they ask
+  // that no cached copy and no excerpt be shown even if a URL does somehow get
+  // listed, which is the difference between "not in the results" and "in the
+  // results with the league's name under it".
+  //
+  // Belt and braces on purpose. `app/robots.ts` is the layer that actually
+  // matters, and it stops well-behaved crawlers before they ever get here.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, nofollow, noarchive, nosnippet, noimageindex",
+          },
+        ],
+      },
+    ];
+  },
+
   // Player headshots, served from the NFL's own CDN and stored in
   // player_index.headshot_url by the daily refresh.
   //
