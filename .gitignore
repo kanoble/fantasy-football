@@ -19,6 +19,26 @@ credentials.json
 *.key
 
 # ---------------------------------------------------------------------------
+# Working notes that describe this project more completely than the code does.
+#
+# The repo is public, and stays public while the Yahoo API application is under
+# review. The handover is the single most revealing file in it: 3,000+ lines of
+# current state, open questions, what is stubbed, who plays in the league, and
+# what is worth trying next. None of it is secret and all of it is interesting,
+# which is the problem — it is the difference between a public repo that reads
+# as a scoring library and one that reads as a family's league.
+#
+# The file itself is NOT deleted. It stays at docs/handover.md, untracked, and
+# every session still reads and refreshes it. This only stops it being
+# published from here on.
+#
+# Note what this does not do: docs/handover.md is already in the history of this
+# repo and in the diffs of merged PRs, both of which stay readable while it is
+# public. This closes the tap; it does not drain the tank.
+# ---------------------------------------------------------------------------
+docs/handover.md
+
+# ---------------------------------------------------------------------------
 # Data, caches, and local state — regenerable, often large, sometimes derived
 # from sources we are not licensed to redistribute.
 # ---------------------------------------------------------------------------
