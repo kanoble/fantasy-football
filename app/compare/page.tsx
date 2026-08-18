@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MAX_COMPARE, STAT_SEASON } from "@/lib/board";
 import { fetchPlayerOptions, fetchPlayers } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { viewerFrom } from "@/lib/viewer";
 import { AppBar, PageHead } from "../chrome";
 import { NotOnList } from "../not-on-list";
 import { Picker } from "../picker";
@@ -45,7 +46,7 @@ export default async function ComparePage({
 
   return (
     <main className="shell">
-      <AppBar current="compare" email={user?.email} />
+      <AppBar current="compare" viewer={viewerFrom(user)} />
       <PageHead
         title="Compare"
         context={`${STAT_SEASON} regular season · full PPR · one axis, so the shapes are the comparison`}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { LEAGUE_FOUNDED, dateline, datelineStamp, type Freshness } from "@/lib/board";
+import type { Viewer } from "@/lib/viewer";
 import { Account } from "./account";
 import { Nav, type Section } from "./nav";
 
@@ -82,10 +83,10 @@ export function Lockup({ size }: { size?: number }) {
  */
 export function AppBar({
   current,
-  email,
+  viewer,
 }: {
   current: Section;
-  email: string | undefined;
+  viewer: Viewer;
 }) {
   return (
     <header className="appbar">
@@ -95,7 +96,7 @@ export function AppBar({
           present for the two hours a year it means anything and absent the rest
           of the time. It is a mode the board is in, not a fourth section. */}
       <div className="appbar-right">
-        <Account email={email} />
+        <Account viewer={viewer} />
       </div>
     </header>
   );

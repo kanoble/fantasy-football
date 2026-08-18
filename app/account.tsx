@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
+import type { Viewer } from "@/lib/viewer";
 import { ThemeToggle } from "./theme";
 
 /**
@@ -20,8 +22,14 @@ function initial(email: string | undefined) {
   return first ? first.toUpperCase() : "?";
 }
 
-export function Account({ email }: { email: string | undefined }) {
+export function Account({ viewer }: { viewer: Viewer }) {
+  const { email, avatar } = viewer;
   const [open, setOpen] = useState(false);
+  // A Google photo URL stops resolving the moment the photo is removed, and it
+  // is the browser rather than the server that finds out. The initial is
+  // already the right answer for a member with no photo, so a 404 falls back to
+  // the same place rather than leaving a broken image in the bar.
+  const [noPhoto, setNoPhoto] = useState(false);
   const box = useRef<HTMLDivElement>(null);
 
   // Escape closes, and a click anywhere else closes. Both are registered only
@@ -59,7 +67,30 @@ export function Account({ email }: { email: string | undefined }) {
         aria-label={email ? `Account — ${email}` : "Account"}
         onClick={() => setOpen((was) => !was)}
       >
-        {initial(email)}
+        {avatar && !noPhoto ? (
+          // `unoptimized`, and this is the one decision in the change worth
+          // knowing about. The budget reasoning in `next.config.ts` turns
+          // entirely on WHERE an image appears: a portrait is one per player
+          // page, but the avatar is in the bar on every view of every screen.
+          // These are already small square JPEGs on Google's own CDN, sized by
+          // the URL Google minted, so optimizing them would spend the one
+          // metered thing in the project to make a 28px circle no smaller.
+          //
+          // `alt` is empty on purpose: the button beside it already carries
+          // `aria-label="Account — <address>"`, and a screen reader announcing
+          // the address twice is worse than a decorative image.
+          <Image
+            className="avatar-photo"
+            src={avatar}
+            alt=""
+            width={28}
+            height={28}
+            unoptimized
+            onError={() => setNoPhoto(true)}
+          />
+        ) : (
+          initial(email)
+        )}
       </button>
 
       {open ? (

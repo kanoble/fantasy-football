@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { STAT_SEASON } from "@/lib/board";
 import { fetchMarket } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { viewerFrom } from "@/lib/viewer";
 import { AppBar, PageHead } from "../chrome";
 import { NotOnList } from "../not-on-list";
 import { Chart } from "./chart";
@@ -50,7 +51,7 @@ export default async function MarketPage() {
 
   return (
     <main className="shell">
-      <AppBar current="market" email={user?.email} />
+      <AppBar current="market" viewer={viewerFrom(user)} />
       <PageHead
         title="Market"
         context={`${STAT_SEASON} regular season · full PPR · height is what a price usually buys, so zero is the market's own expectation`}

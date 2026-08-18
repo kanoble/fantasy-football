@@ -6,6 +6,7 @@ import { NotOnList } from "./not-on-list";
 import { ADP_SEASON, STAT_SEASON } from "@/lib/board";
 import { fetchBoard } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { viewerFrom } from "@/lib/viewer";
 
 export const metadata: Metadata = { title: "Draft board" };
 
@@ -34,7 +35,7 @@ export default async function BoardPage() {
 
   return (
     <main className="shell">
-      <AppBar current="board" email={user?.email} />
+      <AppBar current="board" viewer={viewerFrom(user)} />
       <PageHead
         title="Draft board"
         context={`${ADP_SEASON} ADP · ${STAT_SEASON} regular season · ${rows.length} priced players`}
