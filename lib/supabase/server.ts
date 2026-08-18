@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config";
+import { withFreshTokenRetry } from "./fetch-retry";
 
 /**
  * Supabase client for Server Components, Server Actions and Route Handlers.
@@ -14,6 +15,10 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    // One retry for a token PostgREST thinks is from the future — the first
+    // request after sign-in, when two Supabase clocks disagree by a second.
+    // See fetch-retry.ts for the incident and why the seam is here.
+    global: { fetch: withFreshTokenRetry(fetch) },
     cookies: {
       getAll() {
         return cookieStore.getAll();

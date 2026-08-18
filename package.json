@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "test": "node -e \"if (+process.versions.node.split('.')[0] < 22) { console.error('\\n  npm test runs the TypeScript tests through node --test, which needs Node >= 22.\\n  This repo builds on Node 24 in production; .nvmrc pins it. Run: nvm use\\n'); process.exit(1) }\" && node --test lib/*.test.ts"
+    "test": "node -e \"if (+process.versions.node.split('.')[0] < 22) { console.error('\\n  npm test runs the TypeScript tests through node --test, which needs Node >= 22.\\n  This repo builds on Node 24 in production; .nvmrc pins it. Run: nvm use\\n'); process.exit(1) }\" && node --test \"lib/**/*.test.ts\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
