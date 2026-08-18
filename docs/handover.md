@@ -1,6 +1,6 @@
 # Handover
 
-State of the project as of **2026-08-17**. Read this first, then
+State of the project as of **2026-08-18**. Read this first, then
 [architecture.md](architecture.md) for design rationale and
 [scoring-rules.md](scoring-rules.md) for the league's scoring.
 
@@ -10,156 +10,115 @@ Repo: https://github.com/kanoble/fantasy-football (public)
 
 ## Start here
 
-**`/market` is built, its rail knows where you are in the draft, and both PRs are
-merged.** PR #10 shipped the value chart; PR #11 shipped the availability pass
-that was next-step 0 in the previous handover. Everything through `0011` is
-applied and verified.
+**Two PRs shipped this session — #12 and #13 — and both are merged. `main` is
+current, and the repo now has exactly one branch on each side.** Everything
+through `0011` is applied and verified.
 
-`/market` is the fourth screen and **the first one in this app that draws a
-verdict**. It is also the first screen that knows anything about *when you are
-picking* rather than only what everything costs.
-
-**There is no single obvious next piece of work, and that is new.** The last
-three handovers each ended naming one. What is left is a short list of small,
-independent things — see "Next steps" — against one large one that only Kevin can
-do: **run a mock draft.** The draft is 30 August, thirteen days out, and every
-judgment call in the last two sessions is waiting on use rather than on more
-measurement.
+Neither PR changed what the app computes. Both changed what it *tells you when
+something goes wrong*, which is the theme worth carrying forward: this repo's
+recurring cost is not bugs, it is failures that name the wrong thing.
 
 Immediate state:
 
 | | |
 |---|---|
-| Branch | `main`, clean. **PRs #10 and #11 are merged at `08370ea`; this handover commit is the only thing ahead of `origin/main`.** |
-| Migrations | `0001`–`0011`. **All applied. `0011` verified on 2026-08-17.** |
-| Checks | `tsc`, **81 `node --test`**, 62 pytest, `ruff` — all clean, all re-run at the end of the session |
+| Branch | `main`, clean. **PRs #12 and #13 merged at `978fc70`; this handover commit is the only thing ahead of `origin/main`.** |
+| Branches | **One, `main`, locally and on GitHub.** Twelve merged remotes were deleted 2026-08-18. |
+| Migrations | `0001`–`0011`. **All applied.** Nothing to run. |
+| Checks | `tsc`, **103 `node --test`**, 62 pytest, `ruff` — all clean, all re-run against the merged tree |
 | Open decisions | None blocking. The open questions are use questions, not design ones. |
 
-**Both PRs are merged, so production has all the code.** That is a change of
-state worth noticing: for two sessions this repo ended with unpushed commits and a
-decision about whether to ship them. The only thing outstanding now is this
-document.
+**The draft is 30 August, twelve days out.** The single most valuable thing on
+the list is still the one only Kevin can do: **run a mock draft.** Two sessions
+have now ended saying so, and the queue of judgment calls waiting on it has
+grown rather than shrunk.
 
-**Five findings from the 2026-08-17 rail session, in the order they will cost you
-time.** All five are recorded in full further down; these are the ones that
-change what a next session does.
+**Five things this session learned that change what a next session does.**
 
-1. **A thrown PostgREST error tells you nothing, and it is still like that.**
-   Every read in `lib/queries.ts` throws the raw Supabase error object, so Next's
-   overlay renders `{code: …, details: …, hint: Null, message: …}` with every
-   field truncated. **It cost this session a round trip** to work out that the
-   real problem was a missing function. **This is the one piece of unfinished
-   business from the session** — see next-step 0.
+1. **A thrown PostgREST error is a class with a `toJSON()`, and that is why the
+   overlay was unreadable.** Next serializes a thrown server error on its way to
+   the overlay, so what rendered was the *object* — every field truncated,
+   naming neither the function nor the problem. **This is fixed** (`check()` in
+   `lib/query-error.ts`), and the fix is the reason to stop suspecting Next of
+   truncating messages: it was not truncating a message, it was rendering a
+   serialized object.
 
-2. **One server error produces two overlays, and the first one is a lie.** An
-   SSR throw makes Next re-render the tree on the client, which drags
-   `app/layout.tsx` and its theme `<script>` through a client render and logs
-   *"Encountered a script tag while rendering React component"*. **That error is
-   not about `layout.tsx` and nothing there is wrong.** Read overlay 2 of 2
-   first.
+2. **`user_metadata` is not trusted input, and nothing in this repo said so
+   before.** Supabase lets a signed-in member rewrite their own metadata through
+   the auth API, so `avatar_url` is an arbitrary string that Google merely wrote
+   first. `lib/viewer.ts` checks protocol and host before it is ever rendered.
+   **Anything else that ever reads `user_metadata` needs the same treatment.**
 
-3. **The previous handover was wrong about which view the defect was on.** It
-   said the corrected axis topped the rail with McCaffrey and Nacua. Measured,
-   that is the **`median`** vertical. On the default `delta` their residuals are
-   +1 and −5. See "The rail, as built".
+3. **The RLS walk is a committed script now**, `scripts/verify_rls.py`, and it
+   takes nothing: functions from `pg_proc` by grant, arguments from their own
+   signatures, values from the tables. **A new migration is covered the moment
+   it is applied.** It exits non-zero, so it is a check rather than a printout.
 
-4. **Applying a migration is now one command**, `scripts/apply_migration.py`,
-   which reads `.env.local` itself. Do not reconstruct a psql invocation from
-   memory against production.
+4. **`position_starters()` is granted to `authenticated` and is not
+   allowlisted**, which the walk surfaced. That is correct and now documented in
+   code: it is a `CASE` over a position string that reads no table, so there is
+   nothing to leak. It is the schema's only exemption, and it still has to
+   refuse `anon`.
 
-5. **Claude cannot apply migrations.** The permission classifier blocks DDL
-   against the live database every time, regardless of what it has been told in
-   conversation. **Kevin has to run the apply step himself**, and a session that
-   plans around this loses nothing; a session that discovers it at the end has
-   already written code that cannot be tested.
+5. **Claude still cannot apply migrations.** Unchanged, and it will be true next
+   session: the permission classifier evaluates the command, not the transcript.
+   **Kevin runs the apply step himself.** A session that plans around this loses
+   nothing; one that discovers it at the end has written code it cannot test.
 
-**Four things changed outside the screens themselves**, and a session that does
-not know about them will lose time:
+**Two traps confirmed this session, both about checking work rather than doing
+it.**
 
-1. **There is a test runner: `npm test`.** It is `node --test` over
-   `lib/*.test.ts`, no new dependency, and it covers the residual and
-   availability math — **81 cases now, up from 38.** **It needs Node >= 22** —
-   the repo was being developed on Node 20 while Vercel built it on 24, so
-   `.nvmrc` pins 24 and `npm test` fails with a readable message rather than a
-   TypeScript syntax error. **Run `nvm use` first; the default shell here is
-   still Node 20.**
+1. **A preview deployment cannot be curled.** Preview deployments sit behind
+   Vercel's deployment protection, so *every* path — including the Python
+   function — answers a **302 to `vercel.com/sso-api`** for an unauthenticated
+   caller. A browser signed in to Vercel sees the app fine; `curl` cannot. That
+   is Vercel's gate, not the app's, and it is why **the cron check is a
+   post-merge step rather than a pre-merge one.** This was written down in
+   August, on a branch, in a commit made eight seconds after its PR merged, and
+   was never on `main` until now — see "One commit was stranded for two days".
 
-2. **`--good` went from `#1c8368` to `#1b7f64` in light mode.** Measured, the
-   old value was 4.39:1 against `--bg` and failed the contrast floor the moment
-   it was set in small text on the page ground. Three percent darker, visually
-   indistinguishable, and it lifts the two existing uses too.
+2. **A checker that cannot fail is worse than none.** `verify_rls.py` was tested
+   by removing its one exemption, and that immediately exposed a case it judged
+   wrongly — a function returning a bare integer rather than a set. Had it only
+   ever been run against a passing schema, it would have shipped reporting
+   confident nonsense on the first function that did not return rows.
 
-3. **`allowImportingTsExtensions` is on**, because `lib/value.ts` imports
-   `./board.ts` with the extension. Node resolves ES modules by exact specifier,
-   so that import is the only thing standing between the residual math and
-   having any tests at all.
-
-4. **A `next dev` server was left running on port 3000** at the end of this
-   session, on Node 24. If a page will not load or refresh, check it is still
-   alive before assuming the code is broken — and if you have run `npm run build`
-   since, `rm -rf .next` and restart, because the two share that directory.
-   **Neither the value-chart session nor the rail session ran `npm run build`
-   locally, deliberately, for exactly that reason** — the branch's preview
-   deployment is the build check instead, and it is a real one.
-
-**Four ways this repo has now hidden a change from you. All four look like a
-mistake somewhere else, and all four waste the session that hits them.**
+**Four ways this repo has hidden a change from you. All four look like a mistake
+somewhere else.** Unchanged from the last handover except item 4, which now has
+a cause rather than a description.
 
 1. **The wrong branch.** Commits made on `main` locally and then moved with
    `git branch x && git reset --hard origin/main` silently revert the working
    tree. The dev server reads the working tree, so it serves the old UI and the
-   new work looks like it was never built.
+   new work looks like it was never built. **The working shape that avoids it is
+   now settled** — see "Git and deployment".
 
 2. **`next build` run against a live `next dev`.** They share `.next`. The
    production build clobbers the dev server's chunks on disk while it goes on
    serving stale modules from memory, so one render mixes new components with
-   old. The cure is `rm -rf .next` and restart; the habit worth keeping is not
-   running the two together.
+   old. Cure: `rm -rf .next` and restart.
 
 3. **A stale `tsconfig.tsbuildinfo` outlives a new route.** `typedRoutes`
    generates its types at build, so a fresh route fails `npm run lint` until
-   `npm run build` has run once — that much is known. What is new is that
-   running the build is **not enough**: `"incremental": true` means `tsc` will
-   keep reporting the old error from cache. `rm -f tsconfig.tsbuildinfo` is the
-   second half of the fix, and without it the route looks genuinely broken.
+   `npm run build` has run once — and `"incremental": true` means `tsc` keeps
+   reporting the old error from cache afterward. `rm -f tsconfig.tsbuildinfo` is
+   the second half of the fix.
 
-4. **A server error blames the wrong file.** New on 2026-08-17 and the most
-   misleading of the four. When a server component throws, Next re-renders the
-   tree on the client; that client pass reaches `app/layout.tsx`'s theme
-   `<script>` and logs **"Encountered a script tag while rendering React
-   component"**, pointing at `layout.tsx:51`. **Nothing is wrong with
-   `layout.tsx`.** It is overlay 1 of 2 and it is a consequence of overlay 2,
-   which holds the actual failure. Read the last overlay first.
+4. **A server error blames the wrong file.** When a server component throws,
+   Next re-renders the tree on the client; that client pass reaches
+   `app/layout.tsx`'s theme `<script>` and logs *"Encountered a script tag while
+   rendering React component"*, pointing at `layout.tsx:51`. **Nothing is wrong
+   with `layout.tsx`.** It is overlay 1 of 2 and a consequence of overlay 2,
+   which holds the actual failure. **Read the last overlay first.**
 
-   What made it worse is the shape of the real one — see next-step 0. It read
-   `{code: …, details: …, hint: Null, message: …}`, which names neither the
-   function nor the problem, so the misleading overlay was the more *legible* of
-   the two.
+   What made this so expensive was the shape of the real one, and *that* half is
+   now fixed: overlay 2 used to be an unreadable object and is now a sentence
+   naming the function, the code and the problem.
 
 So: **if a change you just made is not on screen, check
 `git branch --show-current` first, and whether you have run a build under the
 dev server second. If something is throwing, read the last overlay rather than
-the first.**
-
-<!-- superseded, kept for the shape of the failure -->
-<details>
-<summary>The previous session's branch note</summary>
-
-**The working tree is on `compare-interior`, not `main`.** PR #8 merged, so
-`main` is at `e9434d4` and has the whole legibility pass; what it does not have
-is the compare pass or this version of the handover.
-
-| | |
-|---|---|
-| Branch | `compare-interior`, **PR #9** |
-| `main` | `e9434d4` — PR #8 merged 2026-08-17 |
-| Migrations | `0001`–`0009` all applied. **Nothing to run.** |
-| Checks | `tsc`, `next build`, 62 pytest, `ruff` — all clean |
-| Open decisions | None blocking. **Q10 is answered — the amber stays.** See "Open questions" |
-
-</details>
-
----
+the first — and it should now be legible when you get there.**
 
 ## The one-paragraph version
 
@@ -235,6 +194,18 @@ which is what turns "will he last" from a step function into a probability. **It
 is the first thing in this app that models anything**, rather than reporting a
 number the database already held. See "The rail, as built".
 
+**Failures say what failed now (PR #12).** Every read and write threw the raw
+PostgREST error, which turns out to be a class carrying a `toJSON()` — so Next
+serialized it and the overlay rendered an unreadable object. `check()` in
+`lib/query-error.ts` puts the whole diagnosis in `message`. The same PR
+committed **`scripts/verify_rls.py`**, the five-reader RLS walk that four
+migrations each got by hand in a scratchpad. See "Legible failures, as built".
+
+**The app bar shows your own face (PR #13).** P1 off the parked list, and as
+cheap as that note predicted — Supabase already holds what Google sent. The part
+that was *not* predicted is that `user_metadata` is user-writable, so the URL is
+checked before it is rendered. See "The avatar, as built".
+
 **This machine now has a browser**, for the first time in the project's life.
 That closes the gap every previous handover ended on — see "The machine has a
 browser now", which is the most useful thing in this document for the next
@@ -291,6 +262,16 @@ npm run lint         # tsc --noEmit
 npm test             # node --test over lib/*.test.ts — needs Node >= 22
 ```
 
+Two things are run by hand against the live database, and both read `.env.local`
+themselves so neither needs an `export` in front of it:
+
+```bash
+uv run python scripts/apply_migration.py supabase/migrations/0011_adp_spread.sql
+uv run python scripts/verify_rls.py      # every function; name one to narrow it
+```
+
+**Claude can run the second and not the first.** See "Start here".
+
 **`.nvmrc` is new and it fixed a real mismatch**: local development was on Node
 20 while production built on 24. `npm test` runs the TypeScript tests through
 `node --test` directly, with no transpile step and no new dependency, which only
@@ -312,6 +293,24 @@ branch, it gets merged by PR.
 **The deliberation belongs at push time, not commit time.** Vercel builds
 production from `main`, so `git push` ships. Commits are cheap and local;
 pushing is the outward-facing step worth confirming first.
+
+**The working shape this has settled into**, and it works — used twice this
+session with no incident:
+
+1. Commit to `main` locally.
+2. When a PR is wanted, `git checkout -b <name> origin/main` and **cherry-pick**
+   the commits onto it. Branching from `HEAD` drags along anything on `main`
+   that is not meant to ship — which on this repo is usually the handover.
+3. `git checkout main` afterward, so the dev server reads the tree with the work
+   in it.
+4. **After the merge, `git fetch && git rebase origin/main`.** Git recognizes the
+   cherry-picks as already applied and skips them, leaving only what never
+   shipped. **Do not `reset --hard`** — that reverts `docs/handover.md` to
+   whatever `origin/main` last saw, which is usually a session out of date.
+
+**As of 2026-08-18 there is exactly one branch, `main`, locally and on GitHub.**
+Twelve merged remotes were deleted. If `git branch -r` ever shows more than
+`origin/main` and an open PR, something was left behind.
 
 ### Three things that will otherwise cost you time
 
@@ -375,10 +374,13 @@ Verified live on 2026-08-16.
 | **Web UI — `/market`** | **Built and merged (PRs #10 and #11).** The value chart: 299 dots, a rail for the players who cannot have one, the first verdict this app draws, and a rail that ranks by where you are picking. |
 | `market_value()` / `season_form()` | **Working and applied.** Migration `0010`. RLS verified with HS256 tokens across member, differently-cased member, non-member, email-less and `anon`. |
 | `adp_spread()` | **Working and applied.** Migration `0011`, 2026-08-17. Same five-case RLS walk, run with `market_value()` alongside as a control so a pass means the harness is right and not merely agreeable. 221 rows to a member, 0 to a non-member, 401 to `anon`. |
-| **`npm test`** | **Working, and the project's first test runner.** **81** `node --test` cases over the residual and availability math. Needs Node >= 22; `.nvmrc` pins 24. |
-| **`scripts/apply_migration.py`** | **Working.** One command to apply a migration and check its grants. Reads `.env.local` itself, runs in one transaction. |
+| **`npm test`** | **Working, and the project's only test runner.** **103** `node --test` cases over the residual math, the availability math, the error message and the viewer. Needs Node >= 22; `.nvmrc` pins 24. |
+| **`scripts/apply_migration.py`** | **Working.** One command to apply a migration and check its grants. Reads `.env.local` itself, runs in one transaction. **Claude cannot run it.** |
+| **`scripts/verify_rls.py`** | **Working, and committed 2026-08-18.** The five-reader RLS walk over every granted function. Takes nothing; exits non-zero. **12 functions, 56 checks, all passing.** Claude *can* run this one. |
+| **`check()` / `QueryError`** | **Working and merged (PR #12).** Every read and write in the app names itself when it fails. Verified against a live `PGRST202`, not only fixtures. |
+| **The member's Google photo** | **Built and merged (PR #13).** In the app bar on every screen, falling back to the initial on a real 404. `user_metadata` is treated as untrusted. |
 | `data_freshness()` | Working. Powers the dateline on all four screens. |
-| **The app bar and the brand** | **Built and merged.** Crest, wordmark, section tabs, avatar menu, dateline. Markup verified server-side; visuals confirmed by Kevin locally, not on production. |
+| **The app bar and the brand** | **Built and merged.** Crest, wordmark, section tabs, avatar menu, dateline. Markup verified server-side; the avatar's three states measured in a browser in both themes. |
 | **`drafted` table + write policies** | **Working, and the first write path.** Verified with HS256 JWTs across member, non-member, email-less and `anon`. |
 | Next.js + Python cron on one deployment | **Verified in production**, not assumed. `/api/cron/refresh` answers 401 rather than a redirect. |
 
@@ -551,6 +553,18 @@ security definer bypasses the RLS that would otherwise do it.
   `generateMetadata` needs the name and the page needs everything; without it
   that is two identical round trips per player page. Keyed on the string because
   `cache()` compares arguments by identity and `[id]` is a fresh array each call.
+- **`lib/query-error.ts` is not `server-only`, and that is load-bearing.** It is
+  imported by `lib/queries.ts` (which is) and by `lib/drafted.ts` (which
+  deliberately is not, because the write path runs in the browser). Adding the
+  guard would turn the write path into a build error.
+- **`lib/viewer.ts` treats `user_metadata` as hostile.** Supabase lets a member
+  rewrite their own metadata through the auth API. The protocol and host checks
+  are the only thing between that and an `<img src>`; `next.config.ts` restates
+  the same host list for `next/image`. **The two must agree** — change one and
+  change the other.
+- **`AppBar` takes a `Viewer`, not an `email`.** One object, so the next fact
+  the bar wants about who is reading is one edit rather than a sixth across five
+  pages. `viewerFrom(user)` is what the pages call.
 
 ### Scope: draft prep first
 
@@ -1133,7 +1147,8 @@ visible in a file someone reads.
 
 **`npm test` is the first test runner in this project** — `node --test` over
 `lib/*.test.ts`, no new dependency. It shipped with 38 cases and the rail pass
-took it to **81**. It needs Node >= 22; see "Start here".
+took it to 81; PRs #12 and #13 took it to **103**. It needs Node >= 22; see
+"Start here".
 
 The case that matters is **scope invariance**: the draft is walked to 0, 12, 24,
 48, 96 and 120 picks and every surviving dot's coordinates are diffed against the
@@ -1473,6 +1488,150 @@ unlikely is the other mode's whole job. Chris Olave at 11% survives it and ranks
 - **It does not know Kevin's actual seat**, because that is drawn on the day.
   Everything is built so that the moment it is known, one tap sharpens the
   screen.
+
+### Legible failures, as built
+
+**Merged as PR #12, 2026-08-18.** Two pieces of tooling, no change to what the
+app computes or looks like. Both exist because the same thing kept costing
+sessions: a failure that names the wrong thing.
+
+**The cause of the unreadable overlay was not truncation.** `PostgrestError` is
+a class carrying a `toJSON()`, and Next serializes a thrown server error on its
+way to the overlay — so what rendered was the *object*, field by field, none of
+which was the sentence the database had actually written. A missing
+`adp_spread()` produced two overlays and the string `adp_spread` appeared in
+neither.
+
+`check()` and `QueryError` in `lib/query-error.ts` put the whole diagnosis in
+`message`, which is the one field an overlay, a server log and a `console.error`
+all render the same way. Three rules in it worth keeping:
+
+- **The label is passed, not derived.** A PostgREST response carries no record
+  of what was asked for, and that is the single most useful fact when six reads
+  share a `Promise.all` and one fails.
+- **The original is not kept as `cause`.** Re-attaching the object is how it
+  gets serialized back into the shape it was just flattened out of.
+- **It is not `server-only`**, because `lib/drafted.ts` runs in the browser and
+  had the identical defect on the app's only write path — the one that surfaces
+  mid-draft.
+
+Checked against the live database rather than only fixtures. A real `PGRST202`
+now reads `adp_spread() failed [PGRST202]: Could not find the function
+public.adp_spread_typo(p_adp_season) in the schema cache (Searched for …)`.
+
+**`fetchMarket` still throws when only `adp_spread()` fails, and that was the
+one real decision.** The model already degrades a missing spread to a step
+function, so the screen would work. It throws anyway, and *not* on the house
+rule about failures that shout — that rule cuts both ways here. The specific
+reason: roughly three quarters of board rows have no published spread
+**legitimately**, so a silently degraded read would not look empty, it would
+look exactly like the normal case, on the one screen that draws a verdict. Same
+shape as the catch-all proxy matcher that answered the cron with a 307. The
+reasoning is in the code at the call site; **do not reverse it without reading
+that paragraph.**
+
+**`scripts/verify_rls.py` is the other half.** Migrations `0008` through `0011`
+each got the same five-reader walk, written fresh into a scratchpad every time
+and thrown away — the same shape of problem `apply_migration.py` was written
+for.
+
+It takes nothing. Functions come from `pg_proc` by grant, arguments from their
+own signatures via `proargnames` filtered by `proargmodes` (a `returns table`
+function lists its output columns in `proargnames` too, and reading those as
+inputs would invent a dozen arguments), and the values filling them from the
+tables — so the seasons cannot drift the way a constant would, and **a new
+migration is covered the moment it is applied.**
+
+Three things about it that are not obvious:
+
+- **It exits non-zero**, so it is a check rather than a printout for a human to
+  compare against this document by eye.
+- **Run bare it walks everything, which is its own control.** Naming one
+  function is quicker and worth less; it says so when you do.
+- **`position_starters()` is the schema's one exemption**, with the reason in
+  the code: a `CASE` over a position string that reads no table, so there is no
+  allowlist to apply and nothing to leak. It still has to refuse `anon`, because
+  that half is a grant and applies to every function without exception.
+
+**It was tested by removing that exemption**, which is the only reason it is
+trustworthy — and that immediately exposed a case it judged wrongly, a function
+returning a bare integer rather than a set. A checker only ever run against a
+passing schema would have shipped reporting confident nonsense.
+
+One thing not to misread in its output: **`draft_board()` comes back as 1000
+rows, not 923.** That is PostgREST's default max-rows cap, not a change in the
+data.
+
+### The avatar, as built
+
+**Merged as PR #13, 2026-08-18.** P1 off the parked list, and the parked note
+was right about the cheap part: **this is not Google Cloud Project work.**
+Supabase already holds what the provider sent on the user object, under
+`avatar_url` and again under `picture`, so the URL is in hand the moment sign-in
+succeeds — no new scope, no consent-screen change, no API call.
+
+**`AppBar` takes a `Viewer` rather than an `email`.** Without that, the next
+fact the bar wants about who is reading is a sixth edit across the same five
+pages — and there is an obvious next one, since **P2 and P3 both want a
+commissioner or admin notion** and the bar is where it would show.
+
+**The part the parked note did not predict: `user_metadata` is not trusted
+input.** Supabase lets a signed-in member rewrite their own metadata through the
+auth API, so `avatar_url` is an arbitrary string that Google merely wrote first.
+`lib/viewer.ts` checks the protocol and the host before the URL is ever
+rendered, and `next.config.ts` allows the same hosts for `next/image` — two
+halves of one statement about where a photo may come from. **The host list
+carries a leading dot on purpose**: it is what makes `notgoogleusercontent.com`
+fail to match, and there is a test for exactly that.
+
+**Rendered `unoptimized`, deliberately.** The budget paragraph already in
+`next.config.ts` turns entirely on *where* an image appears: a portrait is one
+per player page, but this is in the bar on **every view of every screen**.
+Google already serves it small and square from its own CDN at a size its own URL
+asks for.
+
+**Three states were measured in a browser, in both themes**, through a throwaway
+probe at an unauthenticated URL with Playwright intercepting the request:
+
+| | |
+|---|---|
+| Photo present | 26×26 image inside the 28×28 button, circle-cropped, an off-centre test blob landing centred |
+| Photo 404s | Falls back to the initial. **Tested against a real 404**, which matters — a Google URL stops resolving the moment the photo is removed, and it is the browser that finds out |
+| No photo at all | The initial, which is where the 404 case lands too |
+
+**The open-state amber border is identical with and without a photo** —
+`rgb(216, 184, 129)` light, `rgb(138, 102, 38)` dark. Worth having measured: the
+initial turning amber was half the open affordance, and replacing it with an
+image could have cost that. It did not; the border was always the half doing the
+work. The `color: var(--amber)` rule in that state now has nothing to tint when
+a photo is present, which is harmless and left alone.
+
+### One commit was stranded for two days
+
+Found during the branch cleanup on 2026-08-18 and worth recording as a *shape*
+rather than an incident. `origin/player-compare` was the only unmerged remote
+branch, and it held one commit made **eight seconds after its own PR merged** —
+so it was never in `main` and nothing ever pointed at it again.
+
+What it said is genuinely useful and had been lost since August 16:
+
+> **Preview deployments sit behind Vercel's deployment protection**, so every
+> path — including the Python function — answers a **302 to
+> `vercel.com/sso-api`** for an unauthenticated caller. A browser signed in to
+> Vercel sees the app fine; a `curl` cannot. That is Vercel's gate, not the
+> app's, and it means **the cron check is a post-merge step rather than a
+> pre-merge one.**
+
+Three later handovers recorded that the post-merge checks *passed* without ever
+recording why they have to be post-merge, so the fact was rediscoverable only by
+hitting it again.
+
+**The lesson is about timing, not about Vercel.** A note written onto a branch
+after its PR has merged is written into a place nobody will look. Put it on
+`main`, or put it here.
+
+The commit is preserved as the local tag `orphaned-cron-note` — local only,
+never pushed, and safe to delete now that this section exists.
 
 ### The legibility pass, as built
 
@@ -2228,135 +2387,114 @@ eleven elements of the compare pass, is 7:1 or better in both themes.
 
 ## Next steps, in the order I would do them
 
-PRs #1–#11 are merged. **`main` is clean and in sync; nothing is outstanding.**
+PRs #1–#13 are merged. **`main` is clean, one branch exists, and the only thing
+ahead of `origin/main` is this handover.**
 
-**The draft is 30 August. That is the deadline everything below is ranked
-against**, and as of this handover it is thirteen days away.
+**The draft is 30 August**, twelve days out as of this handover, and that is the
+deadline everything below is ranked against.
 
-**Item 1 is the big one and only Kevin can do it.** Everything else here is
-small, independent, and mostly a matter of taste. This list no longer has a
-single obvious first move the way the last three handovers did.
-
-0. **Make a thrown query error say what failed.** Small, and it is the one piece
-   of unfinished business the rail session created rather than closed.
-
-   Every read in `lib/queries.ts` does `if (x.error) throw x.error`, which throws
-   the **raw PostgREST error object**. Next's overlay renders that as
-   `{code: …, details: …, hint: Null, message: …}` with every field truncated,
-   naming neither the function nor the problem. On 2026-08-17 a missing
-   `adp_spread()` therefore produced two overlays, **neither of which said
-   "adp_spread does not exist"** — and the more legible of the two blamed
-   `app/layout.tsx`. It cost a round trip to diagnose something the database had
-   described precisely.
-
-   The fix is a thrown `Error` with the message, code and function name
-   interpolated. It is a handful of lines and it touches every read on four
-   screens, so **do it as its own commit** — the same rule as the American
-   English sweep, and for the same reason.
-
-   Worth deciding while in there: whether `fetchMarket` should throw at all when
-   only `adp_spread()` fails. Every other read on that screen is load-bearing;
-   this one is an enhancement, and the screen worked without it for a session.
-   Degrading to `spread: null` — which the model already handles, falling back to
-   a step function — would mean a missing migration cost the odds column rather
-   than the whole page. The argument against is this repo's strongest theme:
-   **failures that hide cost more than failures that shout.** Genuinely unclear,
-   worth ten minutes of thought rather than a reflex.
+**Item 1 is the big one and only Kevin can do it.** Item 0 from the last
+handover is done (see "Legible failures, as built") and so is P1 (see "The
+avatar, as built"), so this list is shorter than it was — but it has not gained
+a new obvious first move. What is left is one large thing waiting on use and a
+handful of small independent ones.
 
 1. **Kevin runs a mock draft. This is the most valuable thing on the list and
    nothing else on it is close.**
 
-   He said so himself two sessions ago, and there is now considerably more
-   waiting on it than there was. Four things ride on it:
+   He has said so himself for three sessions, and the queue riding on it has
+   grown rather than shrunk. Five things:
 
    - the drafted toggle finally meets the thing it is for;
    - `/market` gets used against a live board rather than a static one;
    - the judgment calls the value chart had to make — the 192-pick default
      scope, the fixed residual domains, `NEIGHBORS = 13` — get answered by use;
-   - **and so do the rail's**, which are newer and less examined: `SURVIVAL_FLOOR`
-     at 10%, the choice to make "Best expected" a pure expectation, and whether
-     the round selector or the seat is the control anybody actually reaches for.
+   - **and so do the rail's**, which are newer and less examined:
+     `SURVIVAL_FLOOR` at 10%, the choice to make "Best expected" a pure
+     expectation, and whether the round selector or the seat is the control
+     anybody actually reaches for;
+   - **and P2 below stops being a guess.** Whether twelve people can share one
+     board is a question about how a real draft room behaves, and one rehearsal
+     will say more about it than any amount of schema design.
 
    **The seat is the part that cannot be rehearsed in advance**, because it is
-   drawn on the day. What *can* be rehearsed is everything either side of it: set
-   a seat by hand, mark thirty players, watch the heading track the room.
+   drawn on the day. What *can* be rehearsed is everything either side of it:
+   set a seat by hand, mark thirty players, watch the heading track the room.
 
-2. **Do that rehearsal on production rather than locally**, which is the half of
-   item 1 that is a separate decision. Mark thirty players, hide them, undo one,
-   clear the board. It is the last cheap moment to discover that "hide" was the
-   wrong call over "grey out", and it closes the one path never exercised through
-   a real browser session on the hosted origin: the write path has only ever been
-   driven against the live database with hand-signed JWTs.
+2. **Do that rehearsal on production rather than locally.** Mark thirty players,
+   hide them, undo one, clear the board. It is the last cheap moment to discover
+   that "hide" was the wrong call over "grey out", and it closes the one path
+   never exercised through a real browser session on the hosted origin: **the
+   write path has only ever been driven with hand-signed JWTs.**
 
-   **What was already checked on production after PR #5 merged**, 2026-08-16:
-   `/login` serves the crest and `Sign in · Noble Family Football`, so the deploy
-   shipped; `/api/cron/refresh` answers **401 with no redirect** — the regression
-   that hides; and `/` serves a **307 to `/login`** signed out.
-
-   ```bash
-   curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' \
-     https://fantasy-football-red.vercel.app/api/cron/refresh
-   ```
+   Two things are worth watching for specifically, both new since the last
+   rehearsal was proposed. The **drafted write path now names itself when it
+   fails** — a failed mark says `drafted upsert (bijan robinson) failed [...]`
+   rather than throwing an object — so if something does go wrong mid-draft, the
+   console is worth a glance. And the **avatar** is on every screen now; a real
+   session is the first time anybody will see it resolve a real Google URL
+   rather than an intercepted one.
 
    **Still owed and needs a browser:** that both themes render on a *signed-in*
-   screen. Everything verified above is either signed-out or machine-readable.
+   screen. Everything verified from this machine is either signed-out or
+   machine-readable.
 
-3. **Then add the other eleven league members** to `league_members`. Each needs
-   pre-creating, because `disable_signup` blocks a first OAuth sign-in. **Do not
-   do this before Kevin asks** — he has said he wants something he is ready to
-   share first, and the header pass was the last thing he named as standing
-   between here and that. With a draft in a fortnight, this is the item whose
-   window closes: eleven people cannot use a shared drafted board on the day if
-   they were added the night before.
+3. **Settle P2 — concurrent users — then add the other eleven league members.**
+   These are one item now rather than two, and the order matters: the shape of
+   P2 changes `drafted`'s key and its policies, and that is a migration either
+   way. Doing it after eleven people are already marking players is the
+   expensive order.
+
+   Each member needs pre-creating, because `disable_signup` blocks a first OAuth
+   sign-in. **Do not do this before Kevin asks.** With a draft in twelve days
+   this is the item whose window closes: eleven people cannot use a shared board
+   on the day if they were added the night before.
 
 4. **Then the mobile view**, if the eleven are in. Eleven relatives invited to a
-   URL will open it on a phone, and today that is a 62rem grid on a 24rem screen.
-   The app bar is the easy half; the board is the hard half and probably wants
-   its own layout rather than a reflow — see "Still owed on design".
+   URL will open it on a phone, and today that is a 62rem grid on a 24rem
+   screen. The app bar is the easy half; the board is the hard half and probably
+   wants its own layout rather than a reflow.
 
-5. **`/player/[id]`'s stat strip**, which is now the last interior that has been
-   made legible without being designed. `/compare`'s cards solved the same
-   problem — a set of labelled figures with no decided shape — so this is
-   borrowing rather than starting. Lower stakes than the three above: the screen
-   is consistent and not broken.
+5. **The American English sweep.** Still outstanding, still its own commit
+   touching nothing but prose. Kevin uses American English and said so on
+   2026-08-17; everything written from that date on is American and everything
+   before it is not, so this is a mixed-spelling repo.
 
-   Two things worth carrying across with it: the **gauge** (`app/compare/gauge.tsx`
-   is presentational and takes plain numbers) would let a stat tile say where a
-   figure sits rather than only what it is, and the **absolute domains** it reads
-   are already constants in `lib/board.ts`.
+   Two rules it must not break: **do not rename `normaliseName`** in
+   `lib/board.ts` — an exported identifier used across four files, and a rename
+   is churn in a diff that should contain no behavior change — and **do not
+   rewrite quoted spellings inside migration comments** where they describe a
+   column or a source that spells itself that way. The Python side (`ff/`) needs
+   the same sweep and the same rule about identifiers.
 
-   Lower stakes than everything above, and the last item on this list that is
-   about how the app looks rather than what it knows.
+6. **`/player/[id]`'s stat strip**, the last interior made legible without being
+   designed. `/compare`'s cards solved the same problem — a set of labelled
+   figures with no decided shape — so this is borrowing rather than starting.
+   Two things to carry across: the **gauge** (`app/compare/gauge.tsx` is
+   presentational and takes plain numbers) and the **absolute domains** it
+   reads, already constants in `lib/board.ts`.
 
-6. **The rest of what `adp_history` can answer.** The per-player half is built
-   (see "Draft cost, as built"); the cross-player half is not. "What has a pick
-   at RB4 actually returned, over ten seasons" is a `group by` away and would
-   put a curve behind every price on the board rather than beside one career.
-   That is a Trends screen, and the nav already holds a slot for it.
+7. **The rest of what `adp_history` can answer.** The per-player half is built;
+   the cross-player half is not. "What has a pick at RB4 actually returned, over
+   ten seasons" is a `group by` away and would put a curve behind every price on
+   the board rather than beside one career. That is a Trends screen, and the nav
+   already holds a slot for it.
 
-7. **In-season: run the Yahoo score diff** to close Q2 and Q3.
-8. **Then team defense** (Q4), once Q3 is settled.
+8. **In-season: run the Yahoo score diff** to close Q2 and Q3.
+9. **Then team defense** (Q4), once Q3 is settled.
 
 ### Parked, asked for on 2026-08-17
 
-Three things Kevin named while the `/compare` pass was being built. None is
-started; each is recorded with what is already known about it, because the
-cheapest part of each is knowing where it actually lives.
+Four things Kevin named while the `/compare` pass was being built. **P1 is done
+— see "The avatar, as built".** The other three are unstarted; each is recorded
+with what is already known about it, because the cheapest part of each is
+knowing where it actually lives.
 
-**P1. Show the signed-in user's Google profile photo, not their initial.**
-Cheaper than it looks: **this is not Google Cloud Project work.** Supabase already
-stores what the provider returned on the user object — `user_metadata.avatar_url`
-(Google also sends `picture`) — so the URL is in hand the moment sign-in
-succeeds and no new scope, consent-screen change or API call is needed. What the
-work actually is: thread it from the page through `AppBar` to `app/account.tsx`,
-which today takes `email` and nothing else, and decide how it fails. It must fail
-to the initial rather than to a broken image — a Google avatar URL can 404 once a
-photo is removed, and the crest's knockout initial is already the right fallback.
-Two smaller notes: the host is `lh3.googleusercontent.com`, so it needs a
-`remotePatterns` entry in `next.config.ts` before `next/image` will touch it, and
-it is a candidate for `unoptimized` — twelve small avatars already on Google's
-CDN are not worth a transformation each, and that keeps it entirely clear of the
-budget described under "Things that will bite you".
+**P1. Show the signed-in user's Google profile photo, not their initial.
+DONE 2026-08-18, PR #13.** As cheap as this entry predicted, and one thing found
+on the way was worth more than the feature itself: **`user_metadata` is
+user-writable**, so the URL is checked before it is rendered. See "The avatar,
+as built".
 
 **P2. Concurrent users during a live draft.** Kevin's instinct is that twelve
 people all driving one board is chaos, and it is right — the drafted toggle was
@@ -2380,6 +2518,9 @@ of three shapes to take, and they cost very different amounts:
 
   Worth settling before the eleven are added rather than after, because it
   changes the table's key and its policies, and that is a migration either way.
+  **And worth settling after the mock draft rather than before**, because one
+  rehearsal will say more about how a room of twelve actually behaves than any
+  amount of schema design. It is next-step 3 for that reason.
   Note also that the 15s poll was chosen over Realtime because Realtime could not
   be verified with one browser — with twelve people that trade-off is worth
   re-reading, and it is still `alter publication` away.
@@ -2490,6 +2631,47 @@ local; **pushing is the outward-facing step**, and on this repo it is also the
 step that ships.
 
 ## State as of the end of this session
+
+- **`main` is at `978fc70` plus this handover commit, and nothing else is
+  outstanding.** PRs #12 (legible failures) and #13 (the avatar) are both
+  merged; the working tree is clean. `main` was rebased onto `origin/main`
+  after the merges and git skipped the three cherry-picks as already applied,
+  which is the workflow in "Git and deployment" behaving exactly as described.
+- **The repo has one branch now.** Twelve merged remote branches were deleted,
+  and the ten local ones with them. `git branch -r` shows `origin/main` and
+  nothing else.
+- **All checks were re-run against the merged tree, not the local one**: `tsc`,
+  **103** `node --test`, 62 pytest, `ruff`. The point of re-running was to
+  confirm the merge produced what the branches promised, and it did — the only
+  difference between local `main` and `origin/main` is `docs/handover.md`.
+- **Nothing was applied to the database and no migration was written.** `0011`
+  remains the last one. `verify_rls.py` reproduced its recorded measurement
+  exactly on first run — 221 rows to a member, 0 to a non-member, 401 to
+  `anon` — which is the strongest evidence available that the new harness agrees
+  with the hand-run walks it replaces.
+- **The value chart and the rail were not touched.** Neither PR changed what the
+  app computes or how any screen is laid out, apart from one 28px circle.
+- **A defect was found in the checker and fixed before the checker shipped.**
+  `verify_rls.py` judged a scalar-returning function wrongly, and it only came
+  to light because the failure path was deliberately exercised. Worth repeating
+  as a habit: **run the checker against something that should fail.**
+- **The `fetchMarket` question from the last handover is answered and closed.**
+  It still throws. The reasoning is recorded at the call site and in "Legible
+  failures, as built"; it turned on how a degraded read would *look*, not on the
+  general principle.
+- **One two-day-old stranded commit was recovered** during the branch cleanup
+  and its content folded into this document. See "One commit was stranded for
+  two days". The tag `orphaned-cron-note` can be deleted.
+- **Still nobody has seen any of this signed in.** Unchanged, and it is the
+  standing limitation: the machine cannot hold a session, so `/market` has been
+  exercised over REST with minted tokens and the avatar rendered against an
+  intercepted request. **Kevin has seen the earlier work locally**; the avatar
+  he has not.
+- **Nothing has been used in a draft.** That is next-step 1, it is twelve days
+  out, and it is the only thing on the list that cannot be done from this
+  machine.
+
+## State as of the end of the 2026-08-17 rail session
 
 - **`main` is at `08370ea` and in sync with `origin/main`. Nothing is
   outstanding**, which has not been true at the end of a session for three
