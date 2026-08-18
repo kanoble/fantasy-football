@@ -14,6 +14,7 @@ import {
 import { fetchPlayer } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
 import { teamClass } from "@/lib/teams";
+import { viewerFrom } from "@/lib/viewer";
 import { AppBar, PageHead } from "../../chrome";
 import { NotOnList } from "../../not-on-list";
 import { Tip } from "../../tip";
@@ -89,7 +90,7 @@ export default async function PlayerPage({
 
   return (
     <main className="shell">
-      <AppBar current="players" email={user?.email} />
+      <AppBar current="players" viewer={viewerFrom(user)} />
       <PageHead
         title={card.name}
         tone={tone}

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ADP_SEASON, STAT_SEASON } from "@/lib/board";
 import { fetchPlayerOptions } from "@/lib/queries";
 import { createClient } from "@/lib/supabase/server";
+import { viewerFrom } from "@/lib/viewer";
 import { AppBar, PageHead } from "../chrome";
 import { NotOnList } from "../not-on-list";
 import { Picker } from "../picker";
@@ -27,7 +28,7 @@ export default async function PlayersPage() {
 
   return (
     <main className="shell">
-      <AppBar current="players" email={user?.email} />
+      <AppBar current="players" viewer={viewerFrom(user)} />
       <PageHead
         title="Players"
         context={`${ADP_SEASON} ADP · ${STAT_SEASON} regular season · search a name, open a career`}

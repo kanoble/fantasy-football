@@ -694,6 +694,20 @@ code {
   cursor: pointer;
 }
 
+/* The photo fills the button it sits in. `overflow: hidden` on `.avatar` would
+   do it too, but the border stays crisper when the image carries its own
+   radius, and the button keeps its focus ring at full size either way. */
+.avatar-photo {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  /* Google's square is not always the same square: a photo cropped by the
+     provider can arrive slightly off centre, and this keeps the face in the
+     circle rather than the shoulder. */
+  object-position: center;
+}
+
 .avatar:hover {
   color: var(--ink);
   border-color: var(--muted);

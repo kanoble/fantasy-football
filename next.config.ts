@@ -32,6 +32,20 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "static.www.nfl.com", pathname: "/image/**" },
+      // The signed-in member's Google profile photo, in the app bar.
+      //
+      // It is rendered `unoptimized`, deliberately, and the paragraph above is
+      // why: that arithmetic turns on WHERE an image appears, and unlike a
+      // portrait this one is in the bar on every view of every screen. Google
+      // already serves it as a small square from its own CDN at a size its own
+      // URL asks for, so a transformation would spend the metered thing to make
+      // a 28px circle no smaller.
+      //
+      // Listed here even so. `user_metadata` is provider-written but
+      // user-editable through the Supabase auth API, so this is one half of a
+      // pair that says which hosts a photo may come from — `lib/viewer.ts`
+      // holds the other and checks the URL before it is ever rendered.
+      { protocol: "https", hostname: "**.googleusercontent.com", pathname: "/**" },
     ],
     // One width and one quality, so each player costs exactly one cache key
     // rather than one per breakpoint. The portrait is a fixed 96px square in
