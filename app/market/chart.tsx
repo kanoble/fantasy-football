@@ -322,7 +322,7 @@ export function Chart({
       <div className="controls">
         <div className="control-group">
           <span className="lbl">
-            <Tip hint="What the chart measures a player by. Career value is how many positional ranks he typically beats his own draft price by, across every season the market put a price on him — a career-long habit of outperforming his cost. Median week is his typical week's points this season, and Season points is his total. Hover a selected one below the chart for the longer version.">
+            <Tip hint="What the chart measures a player by. Career delta is how many positional ranks he typically beats his own draft price by, across every season the market put a price on him — a career-long habit of outperforming his cost. Median week is his typical week's points this season, and Season points is his total. Hover a selected one below the chart for the longer version.">
               Vertical
             </Tip>
           </span>
@@ -366,7 +366,7 @@ export function Chart({
               beside the chips it is about. */}
           {vertical === "delta" ? (
             <span className="mkt-why">
-              Career value is measured across every season a player was priced, so
+              Career delta is measured across every season a player was priced, so
               there is no season window to narrow.
             </span>
           ) : null}
