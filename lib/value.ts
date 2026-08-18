@@ -599,7 +599,7 @@ export function scopeModel(
 /** What each vertical is called, and what it means, in one place. */
 export const VERTICALS: Record<Vertical, { label: string; hint: string; unit: string }> = {
   delta: {
-    label: "Career value",
+    label: "Career delta",
     hint:
       "How many positional ranks a player typically beats his own draft price by, across every season the market put a price on him. Positive means he beat it. The residual then asks whether that is more or less than others at his position and price manage.",
     unit: "ranks",

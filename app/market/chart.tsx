@@ -321,7 +321,11 @@ export function Chart({
     <section className="mkt">
       <div className="controls">
         <div className="control-group">
-          <span className="lbl">Vertical</span>
+          <span className="lbl">
+            <Tip hint="What the chart measures a player by. Career delta is how many positional ranks he typically beats his own draft price by, across every season the market put a price on him — a career-long habit of outperforming his cost. Median week is his typical week's points this season, and Season points is his total. Hover a selected one below the chart for the longer version.">
+              Vertical
+            </Tip>
+          </span>
           {(Object.keys(VERTICALS) as Vertical[]).map((key) => (
             <button
               key={key}
@@ -355,6 +359,17 @@ export function Chart({
           >
             3 seasons, weighted
           </button>
+          {/* The career delta ignores the window control, so the control says so
+              rather than sitting there greyed with no explanation. A disabled
+              thing that does not say why reads as broken — and it read as
+              broken even with the note further down the page, so it sits here,
+              beside the chips it is about. */}
+          {vertical === "delta" ? (
+            <span className="mkt-why">
+              Career delta is measured across every season a player was priced, so
+              there is no season window to narrow.
+            </span>
+          ) : null}
         </div>
 
         <div className="control-group">
@@ -492,16 +507,6 @@ export function Chart({
           Showing every price. Career figures earned a decade ago sit beside
           today&rsquo;s prices out here, so the biggest residuals past pick{" "}
           {DRAFT_PICKS} tend to belong to players who have retired.
-        </p>
-      ) : null}
-
-      {/* The career delta ignores the window control, so the control says so
-          rather than sitting there greyed with no explanation. A disabled thing
-          that does not say why reads as broken. */}
-      {vertical === "delta" ? (
-        <p className="mkt-why">
-          Career value is measured across every season a player was priced, so the
-          season window does not apply to it.
         </p>
       ) : null}
 
