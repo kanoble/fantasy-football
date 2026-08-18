@@ -31,6 +31,7 @@ type SpreadRow = {
   stdev: number;
   times_drafted: number | null;
 };
+import { check } from "./query-error";
 import { createClient } from "./supabase/server";
 
 /**
@@ -67,8 +68,8 @@ export async function fetchBoard(): Promise<BoardData> {
     supabase.rpc("data_freshness"),
   ]);
 
-  if (membership.error) throw membership.error;
-  if (board.error) throw board.error;
+  check("is_league_member()", membership);
+  check("draft_board()", board);
 
   const isMember = membership.data === true;
 
@@ -172,11 +173,24 @@ export async function fetchMarket(): Promise<MarketData> {
     supabase.rpc("data_freshness"),
   ]);
 
-  if (membership.error) throw membership.error;
-  if (board.error) throw board.error;
-  if (value.error) throw value.error;
-  if (form.error) throw form.error;
-  if (spread.error) throw spread.error;
+  check("is_league_member()", membership);
+  check("draft_board()", board);
+  check("market_value()", value);
+  check("season_form()", form);
+  // This one was worth a second look, because unlike the four above it the
+  // screen genuinely works without it: `figureFor` in `lib/value.ts` already
+  // degrades a missing spread to a step function, so `spread: null` is a state
+  // the model handles rather than a hole. Degrading here would mean a missing
+  // migration cost the odds column instead of the page.
+  //
+  // It still throws, and the reason is specific rather than the house rule about
+  // failures that shout. Roughly three quarters of board rows have no published
+  // spread *legitimately* — so a silently degraded read would not look empty, it
+  // would look exactly like the normal case, on a screen whose whole job is to
+  // draw a verdict. This app has been bitten by that shape once already: the
+  // catch-all proxy matcher that answered the cron with a 307, whose only
+  // symptom was data quietly ceasing to move.
+  check("adp_spread()", spread);
 
   const isMember = membership.data === true;
   const rows = isMember ? ((board.data ?? []) as BoardRow[]) : [];
@@ -276,7 +290,7 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
       supabase.rpc("is_league_member"),
       supabase.rpc("data_freshness"),
     ]);
-    if (membership.error) throw membership.error;
+    check("is_league_member()", membership);
     return {
       cards: [],
       seasons: [],
@@ -314,11 +328,11 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
     supabase.rpc("data_freshness"),
   ]);
 
-  if (membership.error) throw membership.error;
-  if (cards.error) throw cards.error;
-  if (seasons.error) throw seasons.error;
-  if (context.error) throw context.error;
-  if (value.error) throw value.error;
+  check("is_league_member()", membership);
+  check("player_cards()", cards);
+  check("player_seasons()", seasons);
+  check("position_context()", context);
+  check("draft_value()", value);
 
   const isMember = membership.data === true;
 
