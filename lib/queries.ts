@@ -16,6 +16,8 @@ import {
   type SeasonRow,
 } from "./board";
 import type { AdpSpread, FormSeason, MarketValue, ValuePlayer } from "./value";
+import type { ImageUsage, MemberActivity, PipelineRun, StorageRow } from "./admin";
+import { viewerFrom, type Viewer } from "./viewer";
 
 /**
  * One raw row of `adp_spread()`, in the column names SQL returns.
@@ -33,6 +35,33 @@ type SpreadRow = {
 };
 import { check } from "./query-error";
 import { createClient } from "./supabase/server";
+
+/**
+ * Who is reading, for the app bar — the user Supabase returns, plus the one
+ * fact about them the database holds and the user object does not.
+ *
+ * Every signed-in page used to open with the same six lines fetching the user
+ * and passing it to `viewerFrom`. When `admin` arrived it would have been a
+ * seventh line in five places, and a seventh RPC on each; here it is one call,
+ * and `cache` makes it one per request however many components ask.
+ *
+ * `getUser()` revalidates against the auth server, so a page rendered through
+ * this cannot be rendered by a probe holding a forged cookie.
+ */
+export const fetchViewer = cache(async (): Promise<Viewer> => {
+  const supabase = await createClient();
+
+  const [
+    {
+      data: { user },
+    },
+    admin,
+  ] = await Promise.all([supabase.auth.getUser(), supabase.rpc("is_league_admin")]);
+
+  check("is_league_admin()", admin);
+
+  return viewerFrom(user, admin.data === true);
+});
 
 /**
  * Kept apart from `lib/board.ts` so the shared types and constants can be
@@ -358,3 +387,46 @@ export async function fetchPlayers(playerIds: string[]): Promise<PlayerData> {
 export const fetchPlayer = cache(async (playerId: string): Promise<PlayerData> => {
   return fetchPlayers([playerId]);
 });
+
+export type AdminData = {
+  /** Every address on the list or in the log; see `splitMembers` in lib/admin.ts. */
+  activity: MemberActivity[];
+  /** The most recent runs of the daily refresh, newest first. */
+  runs: PipelineRun[];
+  /** Every table in `public` and the `(database)` total, largest first. */
+  storage: StorageRow[];
+  /** Player pages opened this month — the app's own bound on image transformations. */
+  images: ImageUsage | null;
+};
+
+/**
+ * What `/admin` shows.
+ *
+ * Four admin-only reads from migration 0012, all security definer and all
+ * answering only an admin — so a member who types the URL gets four empty
+ * results rather than an error, the same way a non-member gets zero rows from
+ * every other read. The page tells them apart with `Viewer.admin`, not with
+ * emptiness, for the reason `isMember` exists elsewhere in this file.
+ */
+export async function fetchAdmin(): Promise<AdminData> {
+  const supabase = await createClient();
+
+  const [activity, runs, storage, images] = await Promise.all([
+    supabase.rpc("member_activity"),
+    supabase.rpc("pipeline_history"),
+    supabase.rpc("storage_report"),
+    supabase.rpc("image_usage"),
+  ]);
+
+  check("member_activity()", activity);
+  check("pipeline_history()", runs);
+  check("storage_report()", storage);
+  check("image_usage()", images);
+
+  return {
+    activity: (activity.data ?? []) as MemberActivity[],
+    runs: (runs.data ?? []) as PipelineRun[],
+    storage: (storage.data ?? []) as StorageRow[],
+    images: ((images.data ?? [])[0] as ImageUsage | undefined) ?? null,
+  };
+}

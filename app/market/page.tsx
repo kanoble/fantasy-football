@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 
 import { STAT_SEASON } from "@/lib/board";
-import { fetchMarket } from "@/lib/queries";
-import { createClient } from "@/lib/supabase/server";
-import { viewerFrom } from "@/lib/viewer";
+import { fetchMarket, fetchViewer } from "@/lib/queries";
 import { AppBar, PageHead } from "../chrome";
 import { NotOnList } from "../not-on-list";
 import { Chart } from "./chart";
@@ -30,28 +28,23 @@ export const metadata: Metadata = { title: "Market" };
  *
  * This file authenticates and fetches and does nothing else; everything visual
  * is in `chart.tsx` over plain data, which is what lets a probe render it with
- * real rows and no session. `getUser()` revalidates against the auth server, so
- * this component cannot be rendered by one.
+ * real rows and no session. `fetchViewer()` revalidates against the auth
+ * server, so this component cannot be rendered by one.
  */
 export default async function MarketPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { players, freshness, isMember } = await fetchMarket();
+  const [viewer, { players, freshness, isMember }] = await Promise.all([fetchViewer(), fetchMarket()]);
 
   if (!isMember) {
     return (
       <main className="shell">
-        <NotOnList email={user?.email} />
+        <NotOnList email={viewer.email} />
       </main>
     );
   }
 
   return (
     <main className="shell">
-      <AppBar current="market" viewer={viewerFrom(user)} />
+      <AppBar current="market" viewer={viewer} />
       <PageHead
         title="Market"
         context={`${STAT_SEASON} regular season · full PPR · height is what a price usually buys, so zero is the market's own expectation`}

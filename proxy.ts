@@ -4,17 +4,29 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/config";
 
 /**
- * Refreshes the Supabase session on every request and keeps unauthenticated
- * visitors off every route but `/login`.
+ * Refreshes the Supabase session on every request, keeps unauthenticated
+ * visitors off every route but `/login`, and notes that a member was here.
  *
  * This is a convenience barrier, not the security one. The data is protected by
  * RLS in the database: a JWT whose email is not in `league_members` reads zero
  * rows from every table, whether or not it ever reaches a page. Deleting this
- * file would make the app ugly, not unsafe.
+ * file would make the app ugly and the access log quiet, not unsafe.
  *
  * Next 16 calls this `proxy.ts`; `middleware.ts` is the deprecated spelling of
  * the same hook.
  */
+
+/**
+ * How often one browser is written to the access log: once per this window,
+ * held in a cookie so the common case costs no round trip at all. Ten minutes
+ * because "last seen" is read by a person and a person does not need it closer
+ * than that; and because this runs on every navigation, prefetch included, of
+ * every page — the one place in the app where an extra query is paid for by
+ * everything.
+ */
+const SEEN_COOKIE = "ff_seen";
+const SEEN_WINDOW_S = 600;
+
 export async function proxy(request: NextRequest) {
   // Must start from the incoming request, and every cookie the client sets must
   // land on BOTH this request (so the handler below sees the refreshed session)
@@ -69,6 +81,53 @@ export async function proxy(request: NextRequest) {
     url.pathname = "/";
     url.search = "";
     return NextResponse.redirect(url);
+  }
+
+  // Note the visit, at most once per window per browser. The cookie is the
+  // throttle for the honest path — a browser that loads twenty pages in ten
+  // minutes writes one row; `record_access()` itself refuses a second row inside
+  // a minute for anyone who calls it directly. Prefetches are skipped: hovering
+  // a link is not being here. And nothing here may fail the request — a log
+  // that cannot be written is a warning, not a page a member cannot open.
+  const prefetch =
+    request.headers.get("next-router-prefetch") != null ||
+    request.headers.get("purpose") === "prefetch";
+  const userAgent = request.headers.get("user-agent");
+
+  // A player page is also noted by path, every time and with no cookie: this
+  // is the app's own count of the one thing Vercel meters and will not tell it
+  // — image transformations, bounded above by distinct players opened in a
+  // month (see next.config.ts and migration 0012). A reload inside a minute is
+  // one row; `record_access()` sees to that.
+  const playerPage = /^\/player\/[^/]+$/.test(pathname);
+  if (user && !prefetch && playerPage) {
+    const { error } = await supabase.rpc("record_access", {
+      p_kind: "view",
+      p_user_agent: userAgent,
+      p_path: pathname,
+    });
+    if (error) console.warn(`record_access(view) failed [${error.code}]: ${error.message}`);
+  }
+
+  if (user && !isPublic && !prefetch && !request.cookies.has(SEEN_COOKIE)) {
+    const { error } = await supabase.rpc("record_access", {
+      p_kind: "visit",
+      p_user_agent: userAgent,
+    });
+    if (error) {
+      // Left unset so the next request tries again — the first request after
+      // sign-in can be refused for a token skew (see fetch-retry.ts), and the
+      // second is normally fine.
+      console.warn(`record_access(visit) failed [${error.code}]: ${error.message}`);
+    } else {
+      response.cookies.set(SEEN_COOKIE, "1", {
+        maxAge: SEEN_WINDOW_S,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: request.nextUrl.protocol === "https:",
+        path: "/",
+      });
+    }
   }
 
   return response;

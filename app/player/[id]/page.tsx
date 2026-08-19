@@ -11,10 +11,8 @@ import {
   rowState,
   signedDelta,
 } from "@/lib/board";
-import { fetchPlayer } from "@/lib/queries";
-import { createClient } from "@/lib/supabase/server";
+import { fetchPlayer, fetchViewer } from "@/lib/queries";
 import { teamClass } from "@/lib/teams";
-import { viewerFrom } from "@/lib/viewer";
 import { AppBar, PageHead } from "../../chrome";
 import { NotOnList } from "../../not-on-list";
 import { Tip } from "../../tip";
@@ -44,17 +42,15 @@ export default async function PlayerPage({
 }) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { cards, seasons, context, value, freshness, isMember } = await fetchPlayer(id);
+  const [viewer, { cards, seasons, context, value, freshness, isMember }] = await Promise.all([
+    fetchViewer(),
+    fetchPlayer(id),
+  ]);
 
   if (!isMember) {
     return (
       <main className="shell">
-        <NotOnList email={user?.email} />
+        <NotOnList email={viewer.email} />
       </main>
     );
   }
@@ -90,7 +86,7 @@ export default async function PlayerPage({
 
   return (
     <main className="shell">
-      <AppBar current="players" viewer={viewerFrom(user)} />
+      <AppBar current="players" viewer={viewer} />
       <PageHead
         title={card.name}
         tone={tone}

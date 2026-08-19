@@ -5,9 +5,8 @@ import type { User } from "@supabase/supabase-js";
  *
  * One object rather than a prop each, because the five signed-in pages all reach
  * for the same facts and each new one would otherwise be a sixth edit across
- * five files. The bar is also where a commissioner or admin flag would land if
- * the draft ever grows one, and that belongs beside the address rather than in a
- * second parameter alongside it.
+ * five files. `admin` is the first such fact to arrive after the photo, and it
+ * landed here as predicted rather than as a sixth prop.
  */
 export type Viewer = {
   /** The signed-in address, or undefined when nobody is signed in. */
@@ -18,6 +17,13 @@ export type Viewer = {
    * no photo set at all.
    */
   avatar: string | null;
+  /**
+   * Whether the address is the league admin — `role = 'admin'` on
+   * `league_members`, asked of the database rather than read off the user,
+   * because nothing on the user object is trusted input (see below) and this
+   * one decides who sees `/admin`. False for everyone until the answer arrives.
+   */
+  admin: boolean;
 };
 
 /**
@@ -43,7 +49,7 @@ const PHOTO_HOSTS = [".googleusercontent.com"];
  * `avatar_url` and again under `picture`. Both are read, because which one
  * arrives is the provider's business rather than ours.
  */
-export function viewerFrom(user: User | null | undefined): Viewer {
+export function viewerFrom(user: User | null | undefined, admin = false): Viewer {
   // Typed as `{[key: string]: any}` by the client, and populated by whatever the
   // provider sent, so nothing here may assume a shape.
   const metadata: Record<string, unknown> = user?.user_metadata ?? {};
@@ -52,6 +58,7 @@ export function viewerFrom(user: User | null | undefined): Viewer {
   return {
     email: user?.email,
     avatar: typeof claimed === "string" ? photoUrl(claimed) : null,
+    admin,
   };
 }
 
