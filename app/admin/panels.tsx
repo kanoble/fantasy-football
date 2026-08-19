@@ -331,7 +331,7 @@ export function FreeTiers({ rows, images }: { rows: StorageRow[]; images: ImageU
  * A panel that quietly omitted egress would read as "everything is fine" — the
  * same failure as an empty page for a non-member. Kept to two sentences at
  * Kevin's request; the how — a Vercel and a Supabase token, and one pipeline
- * row per source per run — is in the handover, where the next session reads.
+ * row per source per run — is in the roadmap, where the next session reads.
  */
 export function NotMeasured() {
   return (

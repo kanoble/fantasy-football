@@ -165,13 +165,14 @@ Working today, with no credentials required:
 * the free public data layer (nflverse, Sleeper, RotoWire)
 * `ff compare`, draft-prep player comparison
 
-Live: the hosted backend. The scoring pipeline runs on a daily schedule and
-publishes scored player-weeks to Supabase Postgres, behind the access controls
-described above.
+Live: the hosted app. The scoring pipeline runs on a daily schedule and
+publishes scored player-weeks to Supabase Postgres, and a Next.js web app reads
+them — a draft board, player pages, a comparison view and a value chart — behind
+Google sign-in and the access controls described above.
 
-Pending: the web UI, and the Yahoo integration, which is stubbed behind an API
-access application. The free data layer is deliberately designed to work without
-any Yahoo credentials, so the app is useful either way.
+Pending: the Yahoo integration, which is stubbed behind an API access
+application. The free data layer is deliberately designed to work without any
+Yahoo credentials, so the app is useful either way.
 
 ## Getting started
 

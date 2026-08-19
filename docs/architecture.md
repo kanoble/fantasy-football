@@ -66,48 +66,40 @@ This is the enabling move for everything the project is eventually for:
 Because it is a pure function over a table, it works identically on one week and
 on twenty seasons.
 
-## Next feature: draft-prep player comparison
+## Draft-prep player comparison (shipped)
 
 **Decided 2026-08-15**, replacing the live draft assistant (see Resolved
-Decisions below).
+Decisions below), and now built: `ff compare` in the CLI, and the board,
+player and compare screens in the web app.
 
-Take one or more player names and return what's needed to choose between them:
+The signals it is built from, and why none of them needs Yahoo:
 
 | Signal | Source | Auth needed |
 |---|---|---|
 | Scored past performance (per season, per week) | nflverse weekly stats → `scoring/` | none |
-| Consistency — mean, std dev, floor/ceiling week counts | `season_totals()` | none |
-| Market price — ADP across scoring formats | Sleeper season projections | none |
+| Consistency — median, IQR, floor/ceiling week counts | `season_totals()` | none |
+| Market price — ADP, current and a decade of history | Sleeper projections; Fantasy Football Calculator (backfill) | none |
 | Forward projection | Sleeper projections | none |
 | Injury context | RotoWire RSS | none |
 
 **Nothing in that table requires Yahoo.** This is the key property: the feature
-is usable this season regardless of whether the API application is approved.
+is usable regardless of whether the API application is approved. The scoring
+basis is the league's rules transcribed in [scoring-rules.md](scoring-rules.md)
+(**full PPR**), so reading `league/{key}/settings` later is a *validation* step
+against that document, not a prerequisite.
 
-The scoring basis is settled too — the league's rules are transcribed in
-[scoring-rules.md](scoring-rules.md) (**full PPR**, 1.0 per reception), so a
-`ScoringRules` can be hand-built today rather than waiting on
-`league/{key}/settings`. Reading the settings endpoint later becomes a
-*validation* step against that document, not a prerequisite.
-
-Design notes for whoever builds it:
-
-- It belongs in a new `analysis/` layer above `scoring/`, importing from
-  `scoring/` and `sources/` but never from `yahoo/`. That keeps the no-auth
-  guarantee structurally enforced rather than merely intended.
-- Resolving a typed player name to a `gsis_id` is the same identity problem as
-  everything else, minus the Yahoo side — so it can use nflverse rosters
-  directly and does not need `IdentityResolver`'s Yahoo path. `normalize_name`
-  is already implemented and tested for this.
-- Comparison output is a table, which means the underlying function should
-  return a DataFrame and let the caller format it.
+Structurally: `analysis/` sits above `scoring/`, importing from `scoring/` and
+`sources/` but never from `yahoo/`, which keeps the no-auth guarantee enforced
+rather than merely intended. Resolving a typed name to a `gsis_id` uses
+nflverse rosters directly via `normalize_name`, not `IdentityResolver`'s Yahoo
+path.
 
 ## Target architecture: hosted for the league (decided 2026-08-15)
 
 The app is going from a local CLI to a private web app for the league's members
 (a family league; the kids are members too). Stack: **Python pipeline → Supabase
-Postgres → Next.js on Vercel**, with Supabase Auth gated on a hard-coded email
-allowlist.
+Postgres → Next.js on Vercel**, with Supabase Auth gated on an email allowlist
+(a `league_members` table, enforced in row-level security).
 
 ```
 Python (scheduled job)                Supabase Postgres          Vercel
@@ -155,8 +147,6 @@ committed, and is never sent to the browser. No Yahoo credential may be reachabl
 from client-side code — that is a hard rule, not a preference, because Next.js
 makes it genuinely easy to leak a secret into a client bundle by accident.
 
-### Open questions for the migration
-
 ### Where the job runs (decided 2026-08-15)
 
 **Vercel Cron**, invoking `api/cron/refresh.py` on the schedule in `vercel.json`.
@@ -167,7 +157,6 @@ button for anyone who guessed the URL.
 Note Vercel's Hobby plan permits daily cron only; more frequent schedules need
 Pro. Daily at 11:00 UTC sits after nflverse's ~07:00 UTC roster refresh and its
 overnight stats rebuild.
-All three are now decided — see below.
 
 ### Refresh strategy (decided 2026-08-15)
 
@@ -244,83 +233,56 @@ error. Every response is sniffed and raises `YahooThrottledError` instead.
 
 ## Current state
 
-Implemented and tested:
+Live and in use (no credentials required for any of it):
 
-- `scoring/engine.py` — fully implemented, 9 unit tests
-- `identity.normalize_name` — fully implemented, 11 test cases
-- `sources/` — all three sources working (verified live 2026-08-15)
-- `store.py`, `config.py` — implemented
-- `yahoo/` transport, pagination, and throttle handling — implemented
+- `scoring/engine.py` and `scoring/rules.py` — the compiled league rules,
+  `StatRule.columns` as a tuple so summed categories score correctly
+- `sources/` — nflverse, Sleeper and RotoWire, verified live
+- `identity.normalize_name` and the ADP-side match, with a position gate
+- the scheduled pipeline publishing to Supabase Postgres (Vercel Cron, daily)
+- the Next.js app: board, player, compare, market, and an admin screen, behind
+  Google sign-in and the RLS-enforced allowlist
 
-Deliberately stubbed, with interfaces settled:
+Deliberately stubbed, with interfaces settled — all raise `NotImplementedError`
+and none blocks current functionality:
 
-- `scoring.parse_league_settings` — needs one real settings payload
+- `scoring.parse_league_settings` — needs one real settings payload; a
+  *validation* path, since `LEAGUE_SCORING` is hand-built from the settings page
 - `YahooClient._page_count`, `game_key` — need a real payload
 - `IdentityResolver._exact_match`, `_fuzzy_match`, `resolve_many`
+
+Yahoo payload shapes were deliberately not guessed; capture one real payload
+into `tests/fixtures/` and implement against it.
 
 ---
 
 ## Open questions
 
-Carried forward from [data-sources.md](data-sources.md). These are unverified
-and should be resolved before anything depends on them.
+Carried forward from [data-sources.md](data-sources.md). The working to-do
+list lives outside the repo; this is the public summary of what is unverified.
 
-**1. ~~Does `draftresults` populate live during a draft?~~ CLOSED 2026-08-15** —
-not by answering it, but by cutting the feature that needed it. See Resolved
-Decisions above. `draftresults` is still read post-draft, where latency does not
-matter.
-
-**2. Will Yahoo API access be approved, and how long will it take?** Access is
-approval-gated with human review and no published SLA. This is a lead-time item.
-The architecture's response is that the entire free data layer works without it.
-
-**3. Do newly approved apps ever get write scope?** The API is read-only as of
-2026. Immaterial here — this project wants read-only — but it caps what the
-project could ever become.
-
-**4. Are the Yahoo `stat_id` values in `scoring/rules.py` correct?**
-*(no longer blocking, as of 2026-08-15)* `YAHOO_STAT_ID_TO_NFLVERSE` uses the
-widely-circulated NFL stat IDs, unverified. But the league's actual scoring
-values are now transcribed in [scoring-rules.md](scoring-rules.md), so a working
-`ScoringRules` can be built by hand with no Yahoo call and no stat-ID guessing.
-The ID map now only matters for *validating* a parsed API payload against that
-document later. `parse_league_settings` still reports unmapped stat IDs rather
-than silently scoring them zero.
-
-**4b. `StatRule.column` cannot express this league.** *(new, blocking)* Three
-rules map to a **sum** of nflverse columns rather than one — Fumbles Lost (3
-columns), 2-Point Conversions (3), Block Kick (3) — and FG 50+ is one league
-bucket spanning two nflverse columns. `column: str | None` must become
-`columns: tuple[str, ...]`. Fix this **before** building on top of the engine: a
-naive one-column mapping undercounts fumbles by ~two thirds and every downstream
-number inherits the error silently. Detail in
-[scoring-rules.md](scoring-rules.md).
-
-**4c. DST scoring needs a second table and a second entry point.** *(new)*
-Offense and kicking come from `load_player_stats`; team defense does not
-(individual `def_sacks` are per-player, the league scores a team unit). DST needs
-`load_team_stats`, and Points Allowed needs deriving from `load_schedules`
-scores. `score_weekly_stats(stats, rules)` structurally cannot cover this.
-Decide between a separate `score_team_defense()` and per-rule source
-declarations before implementing. Also unresolved: Yahoo's exact definition of
-"Points Allowed" (see open question A in scoring-rules.md).
-
-**5. What is the 2026 NFL game key?** 461 = 2025; the 2026 value is unverified.
-Resolve at runtime via `/game/nfl` rather than hardcoding — `YahooClient.game_key`
-exists for this.
-
-**6. How stable are Sleeper's undocumented endpoints?** The projections/ADP and
-weekly-stats endpoints on `api.sleeper.com` are live but undocumented, with no
-stability guarantee. They are isolated in `sources/sleeper.py` and marked, so a
-break is contained to that module. `order_by` is required in practice —
-omitting it returns placeholder rows.
-
-**7. Does fuzzy matching actually close the rookie gap, and at what accuracy?**
-The need is confirmed: verified 2026-08-15 against the DynastyProcess crosswalk,
-the 2025 class has **0 of 376** players with a `yahoo_id` and the 2026 class
-**0 of 285** (2024: 115 of 356). The fallback is therefore load-bearing, not
-defensive. Its accuracy is unmeasured — build a labelled sample and measure
-before trusting it, and keep the manual-override table as the escape hatch.
+1. ~~Does `draftresults` populate live during a draft?~~ **Closed 2026-08-15**
+   by cutting the feature that needed it. `draftresults` is still read
+   post-draft, where latency does not matter.
+2. **Will Yahoo API access be approved, and when?** Submitted 2026-08-16;
+   approval-gated, human review, no published SLA. Nothing depends on it.
+3. **Do newly approved apps ever get write scope?** Read-only as of 2026.
+   Immaterial here — this project wants read-only.
+4. **Are the Yahoo `stat_id` values in `scoring/rules.py` correct?** Not
+   blocking: the league's scoring is transcribed by hand, so the ID map only
+   matters for validating a parsed payload later. ~~4b, `StatRule.column`
+   cannot express this league~~ — resolved, `columns` is a tuple. **4c, DST
+   scoring needs a second table and a second entry point** — still open;
+   team defense is not implemented, deliberately, until "Points Allowed" can
+   be checked against a live Yahoo box score.
+5. **What is the 2026 NFL game key?** Resolve at runtime via `/game/nfl`;
+   `YahooClient.game_key` exists for this.
+6. **How stable are Sleeper's undocumented endpoints?** Isolated in
+   `sources/sleeper.py`; `order_by` is required in practice.
+7. **Does fuzzy matching close the rookie gap, and at what accuracy?** The
+   need is confirmed (the 2025 and 2026 classes have no `yahoo_id` in the
+   crosswalk); accuracy is unmeasured. Build a labelled sample before trusting
+   it; the manual-override table is the escape hatch.
 
 **Correction to data-sources.md:** it warns that missing crosswalk values are
 the literal string `"NA"` rather than empty. That holds for the raw CSV, but
