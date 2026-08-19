@@ -67,6 +67,27 @@ NO_ALLOWLIST = {
     ),
 }
 
+# Functions (0012) that answer only an admin — `role = 'admin'` on the allowlist.
+# Walked as the admin where the others are walked as a member, plus one extra
+# reader: a member who is NOT the admin, who must read nothing. That reader is
+# the whole point of the set, and is skipped with a note when the allowlist
+# holds no such member to be.
+ADMIN_ONLY = {
+    "is_league_admin",
+    "member_activity",
+    "pipeline_history",
+    "storage_report",
+    "image_usage",
+}
+
+# Functions that write. Calling one as a member would put a row in the table
+# it exists to append to, and there is no row count for a member to "read", so
+# only the `anon` refusal is checked — the half that is a grant and applies to
+# everything. The read side is exercised through the admin functions above.
+WRITES = {
+    "record_access": "appends to access_log; walked as a read it would write",
+}
+
 
 def env(name: str) -> str:
     """One variable from ``.env.local``.
@@ -258,6 +279,11 @@ def fixtures(cur) -> dict[str, object]:
         "p_teams": 12,
         "p_seasons": 3,
         "p_position": "RB",
+        # record_access() is in WRITES and only its anon refusal is checked, but
+        # the request still needs a body — and this one must be a value the
+        # check constraint accepts, so that if the walk ever did reach the
+        # table it would fail on the grant and not on the argument.
+        "p_kind": "visit",
     }
 
 
@@ -289,6 +315,22 @@ def main() -> None:
             sys.exit("league_members is empty; there is no member to verify as.")
         member = row[0]
 
+        # 0012 adds `role`; before it is applied there is no admin and no
+        # column, and the admin functions are not there to walk either.
+        cur.execute(
+            "select exists (select 1 from information_schema.columns "
+            "where table_name = 'league_members' and column_name = 'role')"
+        )
+        admin = plain_member = None
+        if cur.fetchone()[0]:
+            by_role = (
+                "select email from league_members where role %s 'admin' order by email limit 1"
+            )
+            cur.execute(by_role % "=")
+            admin = (cur.fetchone() or [None])[0]
+            cur.execute(by_role % "<>")
+            plain_member = (cur.fetchone() or [None])[0]
+
         functions = granted_functions(cur)
         values = fixtures(cur)
 
@@ -299,30 +341,65 @@ def main() -> None:
         functions = {name: functions[name] for name in wanted}
         print("Walking part of the schema, so this run is not its own control.\n")
 
-    local, domain = member.split("@", 1)
-    print(f"member on the allowlist: {local[:3]}***@{domain}")
+    def masked(email: str | None) -> str:
+        if not email:
+            return "none"
+        local, domain = email.split("@", 1)
+        return f"{local[:3]}***@{domain}"
+
+    print(f"member on the allowlist: {masked(member)}")
+    print(f"admin: {masked(admin)} · member who is not the admin: {masked(plain_member)}")
     print(
         f"prices {values['p_adp_season']}, stats {values['p_stat_season']}, "
         f"source {values['p_source']}, player {values['p_player_id']}\n"
     )
 
-    readers = [
-        ("member", reader(member), "rows"),
-        ("member, cased differently", reader(member.upper()), "same"),
-        ("non-member", reader("nobody@example.invalid"), "empty"),
-        ("no email claim", reader(None), "empty"),
-        ("anon role", reader(member, role="anon"), "refused"),
-    ]
+    def readers_for(name: str) -> list[tuple[str, str, str]]:
+        """Who calls the function, and what each should get back."""
+        if name in ADMIN_ONLY:
+            if not admin:
+                return []
+            return [
+                ("admin", reader(admin), "rows"),
+                ("admin, cased differently", reader(admin.upper()), "same"),
+                (
+                    "member, not the admin",
+                    reader(plain_member) if plain_member else "",
+                    "empty" if plain_member else "skip",
+                ),
+                ("non-member", reader("nobody@example.invalid"), "empty"),
+                ("no email claim", reader(None), "empty"),
+                ("anon role", reader(admin, role="anon"), "refused"),
+            ]
+        return [
+            ("member", reader(member), "rows"),
+            ("member, cased differently", reader(member.upper()), "same"),
+            ("non-member", reader("nobody@example.invalid"), "empty"),
+            ("no email claim", reader(None), "empty"),
+            ("anon role", reader(member, role="anon"), "refused"),
+        ]
 
     checks = 0
     failures: list[str] = []
 
     for name, args in functions.items():
         exempt = NO_ALLOWLIST.get(name)
+        writes = WRITES.get(name)
         signature = ", ".join(arg for arg, _ in args)
         print(f"=== {name}({signature}) ===")
         if exempt:
             print(f"  not allowlisted by design — {exempt}")
+        if writes:
+            print(f"  a write — {writes}; only the anon refusal is checked")
+        if name in ADMIN_ONLY:
+            print("  admin only — walked as the admin, and as a member who is not")
+
+        readers = readers_for(name)
+        if not readers:
+            print("  NO ADMIN on the allowlist — not walked")
+            failures.append(f"{name}: admin-only, but league_members has no role = 'admin'")
+            print()
+            continue
 
         body = body_for(args, values)
         if body is None:
@@ -335,10 +412,14 @@ def main() -> None:
         member_rows: int | None = None
 
         for label, jwt, expect in readers:
-            # The allowlist half is meaningless for a function that has none;
-            # the anon half is not, and applies to every function in the schema.
-            if exempt and expect != "refused":
+            # The allowlist half is meaningless for a function that has none,
+            # and a write is not read; the anon half applies to every function
+            # in the schema regardless.
+            if (exempt or writes) and expect != "refused":
                 print(f"  {label:<26} —    skipped")
+                continue
+            if expect == "skip":
+                print(f"  {label:<26} —    skipped (no such member on the list)")
                 continue
 
             status, payload = call(name, jwt, body)

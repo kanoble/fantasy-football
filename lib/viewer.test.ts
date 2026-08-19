@@ -46,8 +46,16 @@ describe("viewerFrom", () => {
   });
 
   it("has no email and no photo for nobody", () => {
-    assert.deepEqual(viewerFrom(null), { email: undefined, avatar: null });
-    assert.deepEqual(viewerFrom(undefined), { email: undefined, avatar: null });
+    assert.deepEqual(viewerFrom(null), { email: undefined, avatar: null, admin: false });
+    assert.deepEqual(viewerFrom(undefined), { email: undefined, avatar: null, admin: false });
+  });
+
+  it("is nobody's admin unless the database said so", () => {
+    // The flag is passed in, never read off the user: `user_metadata` is
+    // writable by the member, so a claim there would be a claim anyone could
+    // make about themselves.
+    assert.equal(viewerFrom(signedIn({ admin: true, role: "admin" })).admin, false);
+    assert.equal(viewerFrom(signedIn({}), true).admin, true);
   });
 });
 

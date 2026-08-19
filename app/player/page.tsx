@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 
 import { ADP_SEASON, STAT_SEASON } from "@/lib/board";
-import { fetchPlayerOptions } from "@/lib/queries";
-import { createClient } from "@/lib/supabase/server";
-import { viewerFrom } from "@/lib/viewer";
+import { fetchPlayerOptions, fetchViewer } from "@/lib/queries";
 import { AppBar, PageHead } from "../chrome";
 import { NotOnList } from "../not-on-list";
 import { Picker } from "../picker";
@@ -11,24 +9,22 @@ import { Picker } from "../picker";
 export const metadata: Metadata = { title: "Players" };
 
 export default async function PlayersPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { options, freshness, isMember } = await fetchPlayerOptions();
+  const [viewer, { options, freshness, isMember }] = await Promise.all([
+    fetchViewer(),
+    fetchPlayerOptions(),
+  ]);
 
   if (!isMember) {
     return (
       <main className="shell">
-        <NotOnList email={user?.email} />
+        <NotOnList email={viewer.email} />
       </main>
     );
   }
 
   return (
     <main className="shell">
-      <AppBar current="players" viewer={viewerFrom(user)} />
+      <AppBar current="players" viewer={viewer} />
       <PageHead
         title="Players"
         context={`${ADP_SEASON} ADP · ${STAT_SEASON} regular season · search a name, open a career`}

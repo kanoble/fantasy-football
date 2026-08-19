@@ -25,7 +25,12 @@ import Link from "next/link";
  * RB4 actually returned over ten seasons" — which is a bigger and different
  * thing, and is about the market rather than about anyone in it.
  */
-export type Section = "board" | "players" | "compare" | "market";
+/**
+ * `admin` is in the union so `/admin` can carry the same bar, and is not a
+ * tab: it is about the app rather than about players, and it exists for one
+ * reader, so it is reached from the account menu and no tab is current on it.
+ */
+export type Section = "board" | "players" | "compare" | "market" | "admin";
 
 export function Nav({ current }: { current: Section }) {
   return (

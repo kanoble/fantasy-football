@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import type { Viewer } from "@/lib/viewer";
@@ -23,7 +24,7 @@ function initial(email: string | undefined) {
 }
 
 export function Account({ viewer }: { viewer: Viewer }) {
-  const { email, avatar } = viewer;
+  const { email, avatar, admin } = viewer;
   const [open, setOpen] = useState(false);
   // A Google photo URL stops resolving the moment the photo is removed, and it
   // is the browser rather than the server that finds out. The initial is
@@ -98,6 +99,18 @@ export function Account({ viewer }: { viewer: Viewer }) {
           <p className="menu-who" title={email}>
             {email ?? "not signed in"}
           </p>
+
+          {/* Admin is not a section: it is about the app rather than about
+              players, and it exists for one reader. So it lives behind the
+              avatar with the account, and only renders when the database said
+              this address is the admin — a link that returned everyone else
+              three empty panels would be the same mistake as tabs for a
+              non-member. */}
+          {admin ? (
+            <Link className="menu-link" href="/admin" onClick={() => setOpen(false)}>
+              Admin
+            </Link>
+          ) : null}
 
           <div className="menu-row">
             <span className="menu-lbl">Theme</span>

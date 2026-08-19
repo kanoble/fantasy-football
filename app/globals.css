@@ -770,6 +770,26 @@ code {
   color: var(--faint);
 }
 
+/* The admin link, styled as the row above it: a menu is one column of quiet
+   rows, and a link that looked like a button would outrank the sign-out. */
+.menu-link {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--dim);
+  text-decoration: none;
+  border-top: 1px solid var(--rule);
+  padding: 0.6rem 0 0;
+}
+
+.menu-link:hover {
+  color: var(--ink);
+}
+
+.menu-link:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
 .menu-out {
   font: inherit;
   font-size: 0.82rem;
@@ -3386,4 +3406,153 @@ a.mkt-quiet:hover {
     grid-template-columns: 1fr 1fr;
     gap: 1.6rem;
   }
+}
+
+/* ===========================================================================
+   /admin — who has been in, and how close the ceilings are
+
+   Built from parts the app already has: `.panel` for a section, `table.log`
+   for a table of figures, `.gauge` for a gap made visible, `.note` for the
+   sentence that says what a number does not. The additions below are the
+   places those parts assumed a stat column and this screen has a sentence.
+   =========================================================================== */
+
+.admin {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 0.4rem;
+}
+
+/* `.panel` was drawn for a row expanded inside the board and leans on the
+   grid above it for its top edge; standing alone it needs one. */
+.admin-panel {
+  border-top: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
+/* A table wider than a phone scrolls in its own frame rather than the page.
+   The board's answer to the same problem is a redesign (docs/mobile-redesign.md);
+   this screen has one reader and can wait for it. */
+.admin-scroll {
+  overflow-x: auto;
+}
+
+/* `table.log` right-aligns everything but the first column, which is right for
+   twenty-two stat columns and wrong for an address, a status, a device. */
+table.admin-table th.txt,
+table.admin-table td.txt {
+  text-align: left;
+}
+
+table.admin-table td {
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+/* An error string, or the reason for a full rebuild, is the one cell allowed
+   to wrap — a run's failure is the most useful text on the screen and a
+   truncated one names the wrong thing. */
+table.admin-table td.admin-wrap {
+  white-space: normal;
+  max-width: 28rem;
+  color: var(--muted);
+}
+
+/* The address is the row's subject, so it is ink; the note beside it is the
+   allowlist's own annotation ("owner", "cousin"), and reads as one. */
+.admin-who {
+  color: var(--ink);
+}
+
+.admin-tag,
+.admin-note {
+  margin-left: 0.6rem;
+  font-size: 0.6rem;
+  color: var(--faint);
+}
+
+.admin-tag {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+/* A member who has never come. The row is the point of the table, so it is
+   dimmed as a whole rather than dashed in one cell — the eye lands on it. */
+table.admin-table tr.quiet td {
+  color: var(--faint);
+}
+
+table.admin-table tr.quiet td .admin-who {
+  color: var(--dim);
+}
+
+/* Run status: the same two hues the app spends on good and bad, and nothing
+   for "running", which is a state and not a verdict. */
+table.admin-table td.status-ok {
+  color: var(--good);
+}
+
+table.admin-table td.status-error {
+  color: var(--bad);
+  font-weight: 600;
+}
+
+.admin-bad {
+  border-left-color: var(--bad);
+  color: var(--ink);
+}
+
+/* The meters. A label, a figure, and under them a `.gauge` — 4px under a figure
+   on /compare; here it is the figure, so it is taller and its fill is ink until
+   the ceiling is close. */
+.meters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.meter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.meter-label {
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.meter-figure {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--dim);
+}
+
+.admin-gauge {
+  height: 8px;
+  border-radius: 4px;
+}
+
+.admin-gauge .gauge-fill {
+  background: var(--dim);
+  opacity: 1;
+}
+
+.admin-gauge.near .gauge-fill {
+  background: var(--amber);
+}
+
+.admin-gauge.full .gauge-fill {
+  background: var(--bad);
 }

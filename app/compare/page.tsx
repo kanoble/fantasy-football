@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { MAX_COMPARE, STAT_SEASON } from "@/lib/board";
-import { fetchPlayerOptions, fetchPlayers } from "@/lib/queries";
-import { createClient } from "@/lib/supabase/server";
-import { viewerFrom } from "@/lib/viewer";
+import { fetchPlayerOptions, fetchPlayers, fetchViewer } from "@/lib/queries";
 import { AppBar, PageHead } from "../chrome";
 import { NotOnList } from "../not-on-list";
 import { Picker } from "../picker";
@@ -26,18 +24,13 @@ export default async function ComparePage({
   const dropped = Math.max(0, requested.length - MAX_COMPARE);
   const wanted = requested.slice(0, MAX_COMPARE);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const [{ cards, seasons, context, value, isMember }, { options, freshness }] =
-    await Promise.all([fetchPlayers(wanted), fetchPlayerOptions()]);
+  const [viewer, { cards, seasons, context, value, isMember }, { options, freshness }] =
+    await Promise.all([fetchViewer(), fetchPlayers(wanted), fetchPlayerOptions()]);
 
   if (!isMember) {
     return (
       <main className="shell">
-        <NotOnList email={user?.email} />
+        <NotOnList email={viewer.email} />
       </main>
     );
   }
@@ -46,7 +39,7 @@ export default async function ComparePage({
 
   return (
     <main className="shell">
-      <AppBar current="compare" viewer={viewerFrom(user)} />
+      <AppBar current="compare" viewer={viewer} />
       <PageHead
         title="Compare"
         context={`${STAT_SEASON} regular season · full PPR · one axis, so the shapes are the comparison`}

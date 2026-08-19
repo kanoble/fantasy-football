@@ -4,9 +4,7 @@ import { Board } from "./board";
 import { AppBar, PageHead } from "./chrome";
 import { NotOnList } from "./not-on-list";
 import { ADP_SEASON, STAT_SEASON } from "@/lib/board";
-import { fetchBoard } from "@/lib/queries";
-import { createClient } from "@/lib/supabase/server";
-import { viewerFrom } from "@/lib/viewer";
+import { fetchBoard, fetchViewer } from "@/lib/queries";
 
 export const metadata: Metadata = { title: "Draft board" };
 
@@ -16,26 +14,21 @@ export const metadata: Metadata = { title: "Draft board" };
 export const revalidate = 3600;
 
 export default async function BoardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { rows, freshness, isMember } = await fetchBoard();
+  const [viewer, { rows, freshness, isMember }] = await Promise.all([fetchViewer(), fetchBoard()]);
 
   // A non-member gets the explanation and nothing else — no app bar, no tabs to
   // sections that would return them zero rows. All four screens agree on this.
   if (!isMember) {
     return (
       <main className="shell">
-        <NotOnList email={user?.email} />
+        <NotOnList email={viewer.email} />
       </main>
     );
   }
 
   return (
     <main className="shell">
-      <AppBar current="board" viewer={viewerFrom(user)} />
+      <AppBar current="board" viewer={viewer} />
       <PageHead
         title="Draft board"
         context={`${ADP_SEASON} ADP · ${STAT_SEASON} regular season · ${rows.length} priced players`}
