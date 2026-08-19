@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Admin" };
  * Asked for on 2026-08-18, the day the allowlist grew past one address. Two
  * questions the app could not answer until then, because with one member they
  * had one answer: has a member actually signed in, and when were they last
- * here. And the panel P3 in the handover asked for before more people were
+ * here. And the panel P3 in the roadmap asked for before more people were
  * behind the login — the free-tier meters, as far as SQL can read them.
  *
  * Reached from the account menu, not a tab: it is about the app rather than

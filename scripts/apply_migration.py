@@ -11,8 +11,8 @@ production database.
 It reads ``.env.local`` on its own. That is the whole reason this file exists
 rather than a shell one-liner: ``ff.config`` calls ``load_dotenv()``, which reads
 ``.env`` and not ``.env.local``, so every hand-run task against the live database
-has needed the connection string exported first — documented in the handover as
-one of the three things that will otherwise cost you time.
+has needed the connection string exported first — documented in the as-built
+notes as one of the three things that will otherwise cost you time.
 
 The migration runs inside a single transaction and is rolled back on any error,
 so a file that fails halfway leaves nothing behind. Postgres does DDL

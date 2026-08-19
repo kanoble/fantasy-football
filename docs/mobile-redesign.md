@@ -8,7 +8,7 @@ except the process. Come back to this when he does.
 Desktop is, and stays, the primary target: the draft happens on a multi-monitor
 setup and density is a feature. The phone gets **its own design over the same
 components and data, not the desktop grid reflowed** — that was the standing
-rule in the handover before this doc existed, and the CSS confirms it (see
+rule in the working notes before this doc existed, and the CSS confirms it (see
 "What is actually there").
 
 ## What is actually there
@@ -37,7 +37,7 @@ for anything done here.
 Screenshot every screen at 390px and 430px, signed in, and write one line per
 screen: what breaks, and what a person would actually be trying to do there on
 a phone. Signed-out screens can use the throwaway `app/auth/probe` trick from
-the handover; signed-in ones need a real session or Kevin's phone screenshots.
+the as-built notes; signed-in ones need a real session or Kevin's phone screenshots.
 Output is a short table, not a design.
 
 ### 2. Decide the phone's job, per screen — Kevin's call
@@ -86,7 +86,7 @@ polish come after, in-season.
 
 ## Constraints already settled elsewhere
 
-- Desktop-first, density is a feature — `docs/handover.md`, "Desktop-first".
+- Desktop-first, density is a feature — `docs/roadmap.md`, "Board design decisions, settled".
 - Members sign in at `https://noblefamilyfootball.com`.
 - Definitions are `<button>`s, not `title`s, precisely so they work on tap.
 - The `drafted` table is shared across the room; a phone board that marks
